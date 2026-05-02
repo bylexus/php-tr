@@ -177,7 +177,7 @@ final class RunnerIntegrationTest extends TestCase
         }
     }
 
-    public function testRunSingleKeepsExistingPayloadWhenNextStepDoesNotProvideOne(): void {
+    public function testRunSingleDrainsQueuedFollowUpStepsWhileKeepingExistingPayload(): void {
         $pdo = PostgresIntegrationConnection::requirePdo($this);
         $tableName = PostgresIntegrationConnection::uniqueTableName();
 
@@ -202,18 +202,12 @@ final class RunnerIntegrationTest extends TestCase
 
             $row = $this->fetchTaskRow($pdo, $tableName, (int) $record->taskId);
 
-            self::assertSame(TaskStatus::QUEUED->value, $row['task_status']);
+            self::assertSame(TaskStatus::SUCCEEDED->value, $row['task_status']);
+            self::assertSame(StepStatus::SUCCEEDED->value, $row['step_status']);
             self::assertSame(['to' => 'alex@example.com', 'from' => 'chuck@example.com'], $row['payload_json']);
-
-            $rehydratedTask = Task::fromQueueRecord($this->fetchQueueRecord($pdo, $tableName, (int) $record->taskId));
-
             self::assertEquals(
-                (object) ['to' => 'alex@example.com', 'from' => 'chuck@example.com'],
-                $rehydratedTask->getPayload(),
-            );
-            self::assertInstanceOf(
-                \ByLexus\DurableTask\Tests\Fixture\PayloadHandoffTargetStepFixture::class,
-                $rehydratedTask->actualStep(),
+                ['status' => 'succeeded', 'meta' => [], 'message' => null],
+                $row['result_json'],
             );
         } finally {
             PostgresIntegrationConnection::dropTableIfExists($pdo, $tableName);
@@ -300,7 +294,7 @@ final class RunnerIntegrationTest extends TestCase
         }
     }
 
-    public function testRunSingleRequeuesRetryableFailureAndSucceedsOnNextPass(): void {
+    public function testRunSingleDrainsRetryableFailureUntilItSucceeds(): void {
         $pdo = PostgresIntegrationConnection::requirePdo($this);
         $tableName = PostgresIntegrationConnection::uniqueTableName();
 
@@ -319,23 +313,6 @@ final class RunnerIntegrationTest extends TestCase
                 $pdo,
                 $configuration,
                 new RunnerConfiguration('runner-retry-1'),
-            );
-
-            self::assertSame(1, $runner->runSingle());
-
-            $retryRow = $this->fetchTaskRow($pdo, $tableName, (int) $record->taskId);
-
-            self::assertSame(TaskStatus::QUEUED->value, $retryRow['task_status']);
-            self::assertSame(StepStatus::QUEUED->value, $retryRow['step_status']);
-            self::assertSame(1, $retryRow['step_attempt']);
-            self::assertSame(['failuresRemaining' => 0], $retryRow['payload_json']);
-            self::assertEquals(
-                [
-                    'status' => 'failed',
-                    'meta' => ['willRetry' => true],
-                    'message' => 'Step failed and will be retried.',
-                ],
-                $retryRow['result_json'],
             );
 
             self::assertSame(1, $runner->runSingle());
@@ -685,7 +662,7 @@ final class RunnerIntegrationTest extends TestCase
         }
     }
 
-    public function testRunSingleFailsTaskWhenRetriesAreExhausted(): void {
+    public function testRunSingleDrainsRetriesAndFailsTaskWhenTheyAreExhausted(): void {
         $pdo = PostgresIntegrationConnection::requirePdo($this);
         $tableName = PostgresIntegrationConnection::uniqueTableName();
 
@@ -706,7 +683,6 @@ final class RunnerIntegrationTest extends TestCase
                 new RunnerConfiguration('runner-retry-exhausted'),
             );
 
-            self::assertSame(1, $runner->runSingle());
             self::assertSame(1, $runner->runSingle());
 
             $row = $this->fetchTaskRow($pdo, $tableName, (int) $record->taskId);

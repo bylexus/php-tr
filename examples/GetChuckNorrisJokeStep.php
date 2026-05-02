@@ -12,6 +12,7 @@ class GetChuckNorrisJokeStep extends Step {
             $json = file_get_contents('https://api.chucknorris.io/jokes/random');
             $joke = json_decode($json);
             $task->getPayload(static::class)->joke = $joke->value ?? '(oops)';
+            sleep(rand(2, 8));
             if (!empty($joke)) {
                 return new StepResult(StepStatus::SUCCEEDED);
             }

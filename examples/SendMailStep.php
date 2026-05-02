@@ -21,6 +21,7 @@ class SendMailStep extends Step {
             $this->mailer->Subject = $payload->subject ?? '';
             $this->mailer->Body = $payload->body ?? '-';
             $this->mailer->send();
+            sleep(rand(2, 8));
             return new StepResult(StepStatus::SUCCEEDED);
         } catch (Throwable $t) {
             return StepResult::failed(new ErrorInfo($t->getCode(), $t->getMessage()));

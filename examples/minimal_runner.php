@@ -15,5 +15,5 @@ $runnerConfig = new RunnerConfiguration(
 $conn = new PDO("pgsql:host=127.0.0.1;port=5432;dbname=durable_task_test", 'postgres', 'postgres');
 $runner = new Runner(connection: $conn, runnerConfiguration: $runnerConfig);
 
-$runner->runLoop();
-// $runner->runSingle();
+// $runner->runLoop();
+$runner->runSingle();

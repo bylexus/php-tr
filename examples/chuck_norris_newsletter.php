@@ -2,6 +2,7 @@
 
 use ByLexus\DurableTask\Queue\SchemaManager;
 use PHPMailer\PHPMailer\PHPMailer;
+use Psr\Log\LoggerInterface;
 
 require_once(__DIR__ . '/../vendor/autoload.php');
 require_once(__DIR__ . '/ChuckNorrisNewsletterTask.php');
