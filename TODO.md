@@ -122,8 +122,26 @@
 - [x] Add unit tests for constructor resolution success and failure cases on both tasks and steps.
 - [x] Add integration coverage for missing-container and missing-service scenarios.
 
+## PSR-3 Logging
+
+- [x] Add `psr/log` as a runtime Composer dependency.
+- [x] Add optional `LoggerInterface` support to the `Task` base class constructor and expose `setLogger()` and `getLogger()`.
+- [x] Add optional `LoggerInterface` support to the `Step` base class constructor and expose `setLogger()` and `getLogger()`.
+- [x] Add optional `LoggerInterface` support to `RunnerConfiguration`.
+- [x] Make `Runner` default to `Psr\Log\NullLogger` when no logger is configured.
+- [x] Make `Runner` resolve exactly one active logger per execution path and reuse it consistently.
+- [x] Ensure reconstructed tasks and steps always receive the active logger through `setLogger()` after hydration.
+- [x] Keep constructor injection compatible when the configured PSR-11 container can resolve `LoggerInterface`.
+- [x] Log task and step creation through the base classes.
+- [x] Log task hydration, step hydration, `nextStep()` decisions, and `updateStep()` transitions.
+- [x] Log queue enqueue, claim, update, notification, and expired-row deletion operations.
+- [x] Log task and step status transitions including retry, cancellation, success, and failure paths.
+- [x] Log caught exceptions, instantiation failures, and queue persistence failures with structured context.
+- [x] Add unit tests for logger storage and propagation on `Task`, `Step`, and `RunnerConfiguration`.
+- [x] Add runner tests that verify configured logger usage and `NullLogger` fallback resolution.
+- [x] Add queue and integration tests that verify the required lifecycle and error events are emitted.
+
 
 ## Arbitary notes
 
-- add logger infrastructure
 - during singal shutdown, cleanup quueue: running tasks should be reset to queued

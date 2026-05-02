@@ -12,10 +12,14 @@ use ByLexus\DurableTask\Queue\QueueConfiguration;
 use ByLexus\DurableTask\Queue\QueueRecord;
 use ByLexus\DurableTask\Result\StepResult;
 use ByLexus\DurableTask\Runtime\ClassInstantiator;
+use ByLexus\DurableTask\Runtime\ContextualLogger;
 use Psr\Container\ContainerInterface;
+use Psr\Log\LoggerInterface;
 
 abstract class Task {
     private mixed $payload = null;
+    private ?LoggerInterface $baseLogger = null;
+    private ?LoggerInterface $logger = null;
 
     private ?int $id = null;
     private ?TaskStatus $status = null;
@@ -27,6 +31,16 @@ abstract class Task {
     private bool $cancelRequested = false;
     private ?string $cancelReason = null;
     private ?Step $actualStep = null;
+
+    public function __construct(?LoggerInterface $logger = null) {
+        if ($logger !== null) {
+            $this->setLogger($logger);
+        }
+
+        $this->logger?->debug('Task created.', [
+            'taskClass' => static::class,
+        ]);
+    }
 
     public function getId(): ?int {
         return $this->id;
@@ -71,6 +85,20 @@ abstract class Task {
 
     public function actualStep(): ?Step {
         return $this->actualStep;
+    }
+
+    public function setLogger(LoggerInterface $logger): void {
+        $this->baseLogger = $logger;
+        $this->logger = new ContextualLogger($logger, function (): array {
+            return [
+                'taskId' => $this->id,
+                'stepClass' => $this->actualStep === null ? null : $this->actualStep::class,
+            ];
+        });
+    }
+
+    public function getLogger(): ?LoggerInterface {
+        return $this->logger;
     }
 
     public static function getPayloadClassContext(): string {
@@ -136,7 +164,16 @@ abstract class Task {
         $taskMetadata = $resolver->resolveTaskMetadata(static::class);
         $resolver->resolveStepMetadata($firstStep::class, $taskMetadata);
 
-        $queue = new PostgresQueue($connection, $configuration);
+        if ($this->baseLogger !== null) {
+            $firstStep->setLogger($this->baseLogger);
+        }
+
+        $this->logger?->info('Task enqueue requested.', [
+            'taskClass' => static::class,
+            'stepClass' => $firstStep::class,
+        ]);
+
+        $queue = new PostgresQueue($connection, $configuration, $this->baseLogger);
         $record = $queue->enqueue($this, $firstStep);
 
         $firstStep->hydrateFromQueueRecord($record);
@@ -147,11 +184,29 @@ abstract class Task {
 
     public function updateStep(Step $step, StepResult $result): void {
         $this->actualStep = $step;
+
+        $this->logger?->info('Task step updated.', [
+            'taskId' => $this->id,
+            'taskClass' => static::class,
+            'stepClass' => $step::class,
+            'stepStatus' => $result->getStatus()->value,
+            'taskAttempt' => $this->taskAttempt,
+            'stepAttempt' => $step->getStepAttempt(),
+        ]);
     }
 
-    public static function fromQueueRecord(QueueRecord $record, ?ContainerInterface $container = null): self {
-        $task = ClassInstantiator::instantiate($record->taskClass, self::class, self::class, $container);
-        $actualStep = Step::fromQueueRecord($record, $container);
+    public static function fromQueueRecord(
+        QueueRecord $record,
+        ?ContainerInterface $container = null,
+        ?LoggerInterface $logger = null,
+    ): self {
+        $task = ClassInstantiator::instantiate($record->taskClass, self::class, self::class, $container, $logger);
+
+        if ($logger !== null) {
+            $task->setLogger($logger);
+        }
+
+        $actualStep = Step::fromQueueRecord($record, $container, $logger);
         $task->hydrateFromQueueRecord($record, $actualStep);
 
         return $task;
@@ -171,6 +226,15 @@ abstract class Task {
         $this->cancelRequested = $record->cancelRequested;
         $this->cancelReason = $record->cancelReason;
         $this->actualStep = $actualStep;
+
+        $this->logger?->debug('Task hydrated from queue record.', [
+            'taskId' => $record->taskId,
+            'taskClass' => $record->taskClass,
+            'taskStatus' => $record->taskStatus,
+            'taskAttempt' => $record->taskAttempt,
+            'stepClass' => $record->stepClass,
+            'stepStatus' => $record->stepStatus,
+        ]);
     }
 
     protected function setStoredPayload(mixed $payload): void {

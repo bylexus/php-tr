@@ -11,18 +11,35 @@ use ByLexus\DurableTask\Queue\QueueRecord;
 use ByLexus\DurableTask\Task;
 use ByLexus\DurableTask\Tests\Fixture\ConstructorInjectedServiceFixture;
 use ByLexus\DurableTask\Tests\Fixture\ConstructorInjectedTaskFixture;
+use ByLexus\DurableTask\Tests\Fixture\LoggerInjectedStepFixture;
+use ByLexus\DurableTask\Tests\Fixture\LoggerInjectedTaskFixture;
 use ByLexus\DurableTask\Tests\Fixture\EmptyWorkflowTaskFixture;
 use ByLexus\DurableTask\Tests\Fixture\QueueWorkflowStepFixture;
 use ByLexus\DurableTask\Tests\Fixture\QueueWorkflowTaskFixture;
 use ByLexus\DurableTask\Tests\Fixture\ScalarConstructorTaskFixture;
+use ByLexus\DurableTask\Tests\Fixture\ServiceAndLoggerInjectedTaskFixture;
 use ByLexus\DurableTask\Tests\Fixture\StepInjectedOnlyTaskFixture;
 use ByLexus\DurableTask\Tests\Support\InMemoryContainer;
+use ByLexus\DurableTask\Tests\Support\SpyLogger;
 use PHPUnit\Framework\TestCase;
+use Psr\Log\NullLogger;
 
 final class TaskTest extends TestCase
 {
     public function testTaskProvidesPayloadClassContext(): void {
         self::assertSame(QueueWorkflowTaskFixture::class, QueueWorkflowTaskFixture::getPayloadClassContext());
+    }
+
+    public function testTaskAndStepCanAcceptLoggerInConstructor(): void {
+        $logger = new SpyLogger();
+
+        $task = new QueueWorkflowTaskFixture($logger);
+        $step = new QueueWorkflowStepFixture($logger);
+
+        self::assertNotNull($task->getLogger());
+        self::assertNotNull($step->getLogger());
+        self::assertTrue($logger->hasRecord('debug', 'Task created.'));
+        self::assertTrue($logger->hasRecord('debug', 'Step created.'));
     }
 
     public function testTaskCanBeReconstitutedFromQueueRecord(): void {
@@ -61,6 +78,134 @@ final class TaskTest extends TestCase
         self::assertSame('bar', $task->getPayload()->foo);
         self::assertInstanceOf(QueueWorkflowStepFixture::class, $task->actualStep());
         self::assertSame(2, $task->actualStep()?->getStepAttempt());
+    }
+
+    public function testTaskReconstitutionPropagatesLoggerToTaskAndStep(): void {
+        $logger = new SpyLogger();
+        $record = new QueueRecord(
+            42,
+            QueueWorkflowTaskFixture::class,
+            QueueWorkflowStepFixture::class,
+            TaskStatus::QUEUED->value,
+            1,
+            new \DateTimeImmutable('2026-01-01T00:00:00+00:00'),
+            null,
+            null,
+            null,
+            StepStatus::QUEUED->value,
+            2,
+            null,
+            null,
+            ['foo' => 'bar'],
+            null,
+            null,
+            new \DateTimeImmutable('2026-01-01T00:00:00+00:00'),
+            null,
+            null,
+            null,
+            null,
+            false,
+            null,
+            new \DateTimeImmutable('2026-01-01T00:00:00+00:00'),
+        );
+
+        $task = Task::fromQueueRecord($record, null, $logger);
+
+        self::assertNotNull($task->getLogger());
+        self::assertNotNull($task->actualStep()?->getLogger());
+        self::assertTrue($logger->hasRecord('debug', 'Task hydrated from queue record.'));
+        self::assertTrue($logger->hasRecord('debug', 'Step hydrated from queue record.'));
+
+        $taskRecord = $this->findLogRecord($logger, 'debug', 'Task hydrated from queue record.');
+        $stepRecord = $this->findLogRecord($logger, 'debug', 'Step hydrated from queue record.');
+
+        self::assertSame(42, $taskRecord['context']['taskId'] ?? null);
+        self::assertSame(QueueWorkflowStepFixture::class, $taskRecord['context']['stepClass'] ?? null);
+        self::assertSame(42, $stepRecord['context']['taskId'] ?? null);
+        self::assertSame(QueueWorkflowStepFixture::class, $stepRecord['context']['stepClass'] ?? null);
+    }
+
+    public function testTaskReconstitutionInjectsProvidedLoggerWhenConstructorRequestsIt(): void {
+        $logger = new SpyLogger();
+        $record = new QueueRecord(
+            42,
+            LoggerInjectedTaskFixture::class,
+            LoggerInjectedStepFixture::class,
+            TaskStatus::QUEUED->value,
+            1,
+            new \DateTimeImmutable('2026-01-01T00:00:00+00:00'),
+            null,
+            null,
+            null,
+            StepStatus::QUEUED->value,
+            2,
+            null,
+            null,
+            ['foo' => 'bar'],
+            null,
+            null,
+            new \DateTimeImmutable('2026-01-01T00:00:00+00:00'),
+            null,
+            null,
+            null,
+            null,
+            false,
+            null,
+            new \DateTimeImmutable('2026-01-01T00:00:00+00:00'),
+        );
+
+        $task = Task::fromQueueRecord($record, null, $logger);
+
+        self::assertInstanceOf(LoggerInjectedTaskFixture::class, $task);
+        $typedTask = $task;
+
+        self::assertSame($logger, $typedTask->getInjectedLogger());
+        self::assertInstanceOf(LoggerInjectedStepFixture::class, $typedTask->actualStep());
+        $typedStep = $typedTask->actualStep();
+
+        self::assertInstanceOf(LoggerInjectedStepFixture::class, $typedStep);
+        self::assertSame($logger, $typedStep->getInjectedLogger());
+    }
+
+    public function testTaskReconstitutionFallsBackToNullLoggerWhenConstructorRequestsLoggerWithoutConfiguredOne(): void {
+        $record = new QueueRecord(
+            42,
+            LoggerInjectedTaskFixture::class,
+            LoggerInjectedStepFixture::class,
+            TaskStatus::QUEUED->value,
+            1,
+            new \DateTimeImmutable('2026-01-01T00:00:00+00:00'),
+            null,
+            null,
+            null,
+            StepStatus::QUEUED->value,
+            2,
+            null,
+            null,
+            ['foo' => 'bar'],
+            null,
+            null,
+            new \DateTimeImmutable('2026-01-01T00:00:00+00:00'),
+            null,
+            null,
+            null,
+            null,
+            false,
+            null,
+            new \DateTimeImmutable('2026-01-01T00:00:00+00:00'),
+        );
+
+        $task = Task::fromQueueRecord($record);
+
+        self::assertInstanceOf(LoggerInjectedTaskFixture::class, $task);
+        $typedTask = $task;
+
+        self::assertInstanceOf(NullLogger::class, $typedTask->getInjectedLogger());
+        self::assertInstanceOf(LoggerInjectedStepFixture::class, $typedTask->actualStep());
+        $typedStep = $typedTask->actualStep();
+
+        self::assertInstanceOf(LoggerInjectedStepFixture::class, $typedStep);
+        self::assertInstanceOf(NullLogger::class, $typedStep->getInjectedLogger());
     }
 
     public function testEnqueueRequiresInitialStep(): void {
@@ -195,7 +340,63 @@ final class TaskTest extends TestCase
 
         self::assertInstanceOf(ConstructorInjectedTaskFixture::class, $task);
         self::assertSame('mailer', $task->getInjectedServiceName());
-        self::assertInstanceOf(\ByLexus\DurableTask\Tests\Fixture\ConstructorInjectedStepFixture::class, $task->actualStep());
+        self::assertInstanceOf(
+            \ByLexus\DurableTask\Tests\Fixture\ConstructorInjectedStepFixture::class,
+            $task->actualStep(),
+        );
+    }
+
+    public function testTaskReconstitutionUsesFallbackLoggerWhenContainerDoesNotProvideLoggerService(): void {
+        $record = new QueueRecord(
+            42,
+            ServiceAndLoggerInjectedTaskFixture::class,
+            \ByLexus\DurableTask\Tests\Fixture\ServiceAndLoggerInjectedStepFixture::class,
+            TaskStatus::QUEUED->value,
+            1,
+            new \DateTimeImmutable('2026-01-01T00:00:00+00:00'),
+            null,
+            null,
+            null,
+            StepStatus::QUEUED->value,
+            2,
+            null,
+            null,
+            ['foo' => 'bar'],
+            null,
+            null,
+            new \DateTimeImmutable('2026-01-01T00:00:00+00:00'),
+            null,
+            null,
+            null,
+            null,
+            false,
+            null,
+            new \DateTimeImmutable('2026-01-01T00:00:00+00:00'),
+        );
+        $service = new ConstructorInjectedServiceFixture('mailer');
+        $logger = new SpyLogger();
+        $container = new InMemoryContainer([
+            ConstructorInjectedServiceFixture::class => $service,
+        ]);
+
+        $task = Task::fromQueueRecord($record, $container, $logger);
+
+        self::assertInstanceOf(ServiceAndLoggerInjectedTaskFixture::class, $task);
+        $typedTask = $task;
+
+        self::assertSame('mailer', $typedTask->getInjectedServiceName());
+        self::assertSame($logger, $typedTask->getInjectedLogger());
+        self::assertInstanceOf(
+            \ByLexus\DurableTask\Tests\Fixture\ServiceAndLoggerInjectedStepFixture::class,
+            $typedTask->actualStep(),
+        );
+        $typedStep = $typedTask->actualStep();
+
+        self::assertInstanceOf(
+            \ByLexus\DurableTask\Tests\Fixture\ServiceAndLoggerInjectedStepFixture::class,
+            $typedStep,
+        );
+        self::assertSame($logger, $typedStep->getInjectedLogger());
     }
 
     public function testTaskReconstitutionFailsWithoutContainerForInjectedTask(): void {
@@ -296,8 +497,23 @@ final class TaskTest extends TestCase
         $container = new InMemoryContainer([]);
 
         $this->expectException(ConfigurationException::class);
-        $this->expectExceptionMessage('Task class constructor parameter $name must be a resolvable class or interface type');
+        $this->expectExceptionMessage(
+            'Task class constructor parameter $name must be a resolvable class or interface type',
+        );
 
         Task::fromQueueRecord($record, $container);
+    }
+
+    /**
+     * @return array{level: string, message: string, context: array<string, mixed>}
+     */
+    private function findLogRecord(SpyLogger $logger, string $level, string $message): array {
+        foreach ($logger->getRecords() as $record) {
+            if ($record['level'] === $level && $record['message'] === $message) {
+                return $record;
+            }
+        }
+
+        self::fail(sprintf('Expected log record was not found: %s [%s]', $message, $level));
     }
 }

@@ -11,6 +11,8 @@ use ByLexus\DurableTask\Exception\QueueException;
 use ByLexus\DurableTask\Exception\SerializationException;
 use ByLexus\DurableTask\Step;
 use ByLexus\DurableTask\Task;
+use Psr\Log\LoggerInterface;
+use Psr\Log\NullLogger;
 
 final class PostgresQueue {
     /** @var list<string> */
@@ -40,14 +42,27 @@ final class PostgresQueue {
 
     private \PDO $connection;
     private QueueConfiguration $configuration;
+    private LoggerInterface $logger;
 
-    public function __construct(\PDO $connection, ?QueueConfiguration $configuration = null) {
+    public function __construct(
+        \PDO $connection,
+        ?QueueConfiguration $configuration = null,
+        ?LoggerInterface $logger = null,
+    ) {
         $this->connection = $connection;
         $this->configuration = $configuration ?? new QueueConfiguration();
+        $this->logger = $logger ?? new NullLogger();
     }
 
     public function enqueue(Task $task, Step $firstStep): QueueRecord {
         $now = $this->currentTimestamp();
+        $this->logger->info('Queue enqueue started.', [
+            'taskClass' => $task::class,
+            'stepClass' => $firstStep::class,
+            'taskStatus' => TaskStatus::QUEUED->value,
+            'stepStatus' => StepStatus::QUEUED->value,
+        ]);
+
         $statement = $this->connection->prepare(
             sprintf(
                 <<<'SQL'
@@ -134,11 +149,24 @@ SQL,
         $record = $this->fetchRecordFromStatement($statement, 'Failed to read enqueued queue record.');
         $this->emitNotification((string) $record->taskId);
 
+        $this->logger->info('Queue enqueue completed.', [
+            'taskId' => $record->taskId,
+            'taskClass' => $record->taskClass,
+            'stepClass' => $record->stepClass,
+            'taskStatus' => $record->taskStatus,
+            'stepStatus' => $record->stepStatus,
+            'availableAt' => $record->availableAt->format(DATE_ATOM),
+        ]);
+
         return $record;
     }
 
     public function claim(string $runnerId): ?QueueRecord {
         if ($this->connection->inTransaction()) {
+            $this->logger->error('Queue claim called inside active transaction.', [
+                'runnerId' => $runnerId,
+            ]);
+
             throw new QueueException('PostgresQueue::claim() requires no active transaction.');
         }
 
@@ -169,6 +197,10 @@ SQL,
 
             if (!is_array($row)) {
                 $this->connection->commit();
+
+                $this->logger->debug('Queue claim found no available task.', [
+                    'runnerId' => $runnerId,
+                ]);
 
                 return null;
             }
@@ -208,11 +240,28 @@ SQL,
 
             $this->connection->commit();
 
+            $this->logger->info('Queue claim succeeded.', [
+                'runnerId' => $runnerId,
+                'taskId' => $claimedRecord->taskId,
+                'taskClass' => $claimedRecord->taskClass,
+                'stepClass' => $claimedRecord->stepClass,
+                'taskStatus' => $claimedRecord->taskStatus,
+                'stepStatus' => $claimedRecord->stepStatus,
+                'claimedAt' => $claimedRecord->claimedAt?->format(DATE_ATOM),
+                'claimedBy' => $claimedRecord->claimedBy,
+            ]);
+
             return $claimedRecord;
         } catch (\Throwable $throwable) {
             if ($this->connection->inTransaction()) {
                 $this->connection->rollBack();
             }
+
+            $this->logger->error('Queue claim failed.', [
+                'runnerId' => $runnerId,
+                'exceptionClass' => $throwable::class,
+                'errorCode' => (int) $throwable->getCode(),
+            ]);
 
             throw $throwable;
         }
@@ -223,12 +272,26 @@ SQL,
      */
     public function update(int $taskId, array $changes, bool $notify = false): QueueRecord {
         if ($changes === []) {
+            $this->logger->error('Queue update called without changes.', [
+                'taskId' => $taskId,
+            ]);
+
             throw new ConfigurationException('Queue update requires at least one changed column.');
         }
 
         if (!$this->connection->inTransaction()) {
+            $this->logger->error('Queue update called without active transaction.', [
+                'taskId' => $taskId,
+            ]);
+
             throw new QueueException('PostgresQueue::update() requires an active transaction.');
         }
+
+        $this->logger->info('Queue update started.', [
+            'taskId' => $taskId,
+            'columns' => array_keys($changes),
+            'notify' => $notify,
+        ]);
 
         $this->lockRecord($taskId);
 
@@ -267,6 +330,15 @@ SQL,
             $this->emitNotification((string) $taskId);
         }
 
+        $this->logger->info('Queue update completed.', [
+            'taskId' => $record->taskId,
+            'taskClass' => $record->taskClass,
+            'stepClass' => $record->stepClass,
+            'taskStatus' => $record->taskStatus,
+            'stepStatus' => $record->stepStatus,
+            'notify' => $notify,
+        ]);
+
         return $record;
     }
 
@@ -287,7 +359,15 @@ SQL,
             'cancelled_status' => TaskStatus::CANCELLED->value,
         ]);
 
-        return $statement->rowCount();
+        $deletedRows = $statement->rowCount();
+
+        if ($deletedRows > 0) {
+            $this->logger->info('Queue deleted expired terminal rows.', [
+                'deletedRows' => $deletedRows,
+            ]);
+        }
+
+        return $deletedRows;
     }
 
     public function getNotificationChannel(): string {
@@ -306,12 +386,21 @@ SQL,
             'channel' => $this->getNotificationChannel(),
             'payload' => $payload,
         ]);
+
+        $this->logger->debug('Queue emitted notification.', [
+            'channel' => $this->getNotificationChannel(),
+            'payload' => $payload,
+        ]);
     }
 
     private function fetchRecordFromStatement(\PDOStatement $statement, string $errorMessage): QueueRecord {
         $row = $statement->fetch(\PDO::FETCH_ASSOC);
 
         if (!is_array($row)) {
+            $this->logger->error('Queue record fetch failed.', [
+                'message' => $errorMessage,
+            ]);
+
             throw new QueueException($errorMessage);
         }
 

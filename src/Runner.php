@@ -16,6 +16,8 @@ use ByLexus\DurableTask\Queue\SchemaManager;
 use ByLexus\DurableTask\Result\ErrorInfo;
 use ByLexus\DurableTask\Result\StepResult;
 use ByLexus\DurableTask\Runtime\SignalHandler;
+use Psr\Log\LoggerInterface;
+use Psr\Log\NullLogger;
 
 class Runner {
     private \PDO $connection;
@@ -24,6 +26,7 @@ class Runner {
     private MetadataResolver $metadataResolver;
     private PostgresQueue $queue;
     private SignalHandler $signalHandler;
+    private LoggerInterface $logger;
     private bool $notificationListenerRegistered = false;
 
     public function __construct(
@@ -36,17 +39,29 @@ class Runner {
         $this->queueConfiguration = $queueConfiguration ?? new QueueConfiguration();
         $this->runnerConfiguration = $runnerConfiguration ?? new RunnerConfiguration();
         $this->metadataResolver = $metadataResolver ?? new MetadataResolver();
-        $this->queue = new PostgresQueue($this->connection, $this->queueConfiguration);
+        $this->logger = $this->runnerConfiguration->getLogger() ?? new NullLogger();
+        $this->queue = new PostgresQueue($this->connection, $this->queueConfiguration, $this->logger);
         $this->signalHandler = new SignalHandler();
+
+        $this->logger->debug('Runner initialized.', [
+            'runnerId' => $this->runnerConfiguration->getRunnerId(),
+        ]);
     }
 
     public function runSingle(): int {
+        $this->logger->debug('Runner single pass started.', [
+            'runnerId' => $this->runnerConfiguration->getRunnerId(),
+        ]);
         $this->bootstrapSchemaIfConfigured();
         $this->queue->deleteExpired();
 
         $record = $this->queue->claim($this->runnerConfiguration->getRunnerId());
 
         if ($record === null) {
+            $this->logger->debug('Runner found no queued task to process.', [
+                'runnerId' => $this->runnerConfiguration->getRunnerId(),
+            ]);
+
             return 0;
         }
 
@@ -56,6 +71,9 @@ class Runner {
     }
 
     public function runLoop(): void {
+        $this->logger->info('Runner loop started.', [
+            'runnerId' => $this->runnerConfiguration->getRunnerId(),
+        ]);
         $this->bootstrapSchemaIfConfigured();
         $this->signalHandler->register();
         $this->ensureNotificationListener();
@@ -73,12 +91,20 @@ class Runner {
 
             $this->processClaimedRecord($record);
         }
+
+        $this->logger->info('Runner loop stopped.', [
+            'runnerId' => $this->runnerConfiguration->getRunnerId(),
+        ]);
     }
 
     private function bootstrapSchemaIfConfigured(): void {
         if (!$this->runnerConfiguration->shouldBootstrapSchemaOnStart()) {
             return;
         }
+
+        $this->logger->info('Runner bootstrapping queue schema.', [
+            'runnerId' => $this->runnerConfiguration->getRunnerId(),
+        ]);
 
         $schemaManager = new SchemaManager($this->connection, $this->queueConfiguration);
         $schemaManager->bootstrap();
@@ -96,10 +122,20 @@ class Runner {
             ),
         );
         $this->notificationListenerRegistered = true;
+
+        $this->logger->debug('Runner registered notification listener.', [
+            'runnerId' => $this->runnerConfiguration->getRunnerId(),
+            'channel' => $this->queue->getNotificationChannel(),
+        ]);
     }
 
     private function waitForNotification(): void {
         $timeoutMilliseconds = $this->runnerConfiguration->getNotificationWaitTimeoutSeconds() * 1000;
+
+        $this->logger->debug('Runner waiting for notification.', [
+            'runnerId' => $this->runnerConfiguration->getRunnerId(),
+            'timeoutMilliseconds' => $timeoutMilliseconds,
+        ]);
 
         // Plain PDO pgsql connections still need the alias path; on PHP 8.5 we suppress only that deprecation locally.
         if (class_exists('Pdo\\Pgsql') && $this->connection instanceof \Pdo\Pgsql) {
@@ -139,16 +175,44 @@ class Runner {
 
     private function processClaimedRecord(QueueRecord $record): void {
         try {
-            $task = Task::fromQueueRecord($record, $this->runnerConfiguration->getContainer());
+            $task = Task::fromQueueRecord(
+                $record,
+                $this->runnerConfiguration->getContainer(),
+                $this->logger,
+            );
             $step = $task->actualStep();
 
             if ($step === null) {
-                throw new ConfigurationException(sprintf('Claimed queue row %d has no executable step.', $record->taskId));
+                throw new ConfigurationException(
+                    sprintf('Claimed queue row %d has no executable step.', $record->taskId),
+                );
             }
+
+            $task->setLogger($this->logger);
+            $step->setLogger($this->logger);
+
+            $this->logger->info('Runner claimed task for execution.', [
+                'runnerId' => $this->runnerConfiguration->getRunnerId(),
+                'taskId' => $record->taskId,
+                'taskClass' => $record->taskClass,
+                'stepClass' => $record->stepClass,
+                'taskStatus' => $record->taskStatus,
+                'stepStatus' => $record->stepStatus,
+                'claimedAt' => $record->claimedAt?->format(DATE_ATOM),
+                'claimedBy' => $record->claimedBy,
+            ]);
 
             $taskMetadata = $this->metadataResolver->resolveTaskMetadata($record->taskClass);
             $stepMetadata = $this->metadataResolver->resolveStepMetadata($record->stepClass ?? '', $taskMetadata);
         } catch (\Throwable $throwable) {
+            $this->logger->error('Runner failed to hydrate claimed task.', [
+                'runnerId' => $this->runnerConfiguration->getRunnerId(),
+                'taskId' => $record->taskId,
+                'taskClass' => $record->taskClass,
+                'stepClass' => $record->stepClass,
+                'exceptionClass' => $throwable::class,
+                'errorCode' => (int) $throwable->getCode(),
+            ]);
             $this->persistClaimFailure($record, $throwable);
 
             return;
@@ -161,6 +225,17 @@ class Runner {
         try {
             $task->updateStep($step, $result);
             $nextStep = $task->nextStep($step);
+
+            if ($nextStep !== null) {
+                $nextStep->setLogger($this->logger);
+
+                $this->logger->info('Task selected next step.', [
+                    'taskId' => $record->taskId,
+                    'taskClass' => $record->taskClass,
+                    'stepClass' => $nextStep::class,
+                ]);
+            }
+
             $changes = $this->changesForResult(
                 $record,
                 $task,
@@ -170,6 +245,14 @@ class Runner {
                 $stepMetadata->getRetryMode(),
                 $stepMetadata->getRetries(),
             );
+            $this->logger->info('Runner persisting task result.', [
+                'runnerId' => $this->runnerConfiguration->getRunnerId(),
+                'taskId' => $record->taskId,
+                'taskClass' => $record->taskClass,
+                'stepClass' => $record->stepClass,
+                'stepStatus' => $result->getStatus()->value,
+                'nextStepClass' => $nextStep === null ? null : $nextStep::class,
+            ]);
             $this->queue->update((int) $record->taskId, $changes, true);
             $this->connection->commit();
         } catch (\Throwable $throwable) {
@@ -177,14 +260,41 @@ class Runner {
                 $this->connection->rollBack();
             }
 
+            $this->logger->error('Runner failed while persisting task result.', [
+                'runnerId' => $this->runnerConfiguration->getRunnerId(),
+                'taskId' => $record->taskId,
+                'taskClass' => $record->taskClass,
+                'stepClass' => $record->stepClass,
+                'exceptionClass' => $throwable::class,
+                'errorCode' => (int) $throwable->getCode(),
+            ]);
+
             throw $throwable;
         }
     }
 
     private function executeStep(Task $task, Step $step): StepResult {
         try {
+            $this->logger->info('Runner executing step.', [
+                'runnerId' => $this->runnerConfiguration->getRunnerId(),
+                'taskId' => $task->getId(),
+                'taskClass' => $task::class,
+                'stepClass' => $step::class,
+                'taskAttempt' => $task->getTaskAttempt(),
+                'stepAttempt' => $step->getStepAttempt(),
+            ]);
+
             return $step->execute($task);
         } catch (\Throwable $throwable) {
+            $this->logger->error('Runner caught step exception.', [
+                'runnerId' => $this->runnerConfiguration->getRunnerId(),
+                'taskId' => $task->getId(),
+                'taskClass' => $task::class,
+                'stepClass' => $step::class,
+                'exceptionClass' => $throwable::class,
+                'errorCode' => (int) $throwable->getCode(),
+            ]);
+
             return StepResult::failed(
                 errorInfo: new ErrorInfo(
                     (int) $throwable->getCode(),
@@ -205,6 +315,13 @@ class Runner {
         if ($record->cancelRequested) {
             $message = $record->cancelReason ?? 'Cancellation requested.';
 
+            $this->logger->warning('Runner detected task cancellation request.', [
+                'runnerId' => $this->runnerConfiguration->getRunnerId(),
+                'taskId' => $record->taskId,
+                'taskClass' => $record->taskClass,
+                'stepClass' => $record->stepClass,
+            ]);
+
             return StepResult::cancelled(
                 errorInfo: new ErrorInfo(499, $message),
                 meta: ['requested' => true],
@@ -213,6 +330,13 @@ class Runner {
         }
 
         if ($this->hasExceededMaxRuntime($record, $maxRuntime)) {
+            $this->logger->warning('Runner detected step timeout before execution.', [
+                'runnerId' => $this->runnerConfiguration->getRunnerId(),
+                'taskId' => $record->taskId,
+                'taskClass' => $record->taskClass,
+                'stepClass' => $record->stepClass,
+            ]);
+
             return StepResult::failed(
                 errorInfo: new ErrorInfo(408, 'Step exceeded its configured maximum runtime.'),
                 meta: ['timedOut' => true],
@@ -223,6 +347,13 @@ class Runner {
         $result = $this->executeStep($task, $step);
 
         if ($this->hasExceededMaxRuntime($record, $maxRuntime)) {
+            $this->logger->warning('Runner detected step timeout after execution.', [
+                'runnerId' => $this->runnerConfiguration->getRunnerId(),
+                'taskId' => $record->taskId,
+                'taskClass' => $record->taskClass,
+                'stepClass' => $record->stepClass,
+            ]);
+
             return StepResult::failed(
                 errorInfo: new ErrorInfo(
                     408,
@@ -246,6 +377,15 @@ class Runner {
         );
 
         $this->connection->beginTransaction();
+
+        $this->logger->error('Runner persisting claim failure.', [
+            'runnerId' => $this->runnerConfiguration->getRunnerId(),
+            'taskId' => $record->taskId,
+            'taskClass' => $record->taskClass,
+            'stepClass' => $record->stepClass,
+            'exceptionClass' => $throwable::class,
+            'errorCode' => $errorCode,
+        ]);
 
         try {
             $this->queue->update(
@@ -311,6 +451,14 @@ class Runner {
             && $retryMode === \ByLexus\DurableTask\Enum\RetryMode::RESTART
             && $record->stepAttempt < $retries
         ) {
+            $this->logger->warning('Runner requeued failed step for retry.', [
+                'runnerId' => $this->runnerConfiguration->getRunnerId(),
+                'taskId' => $record->taskId,
+                'taskClass' => $record->taskClass,
+                'stepClass' => $record->stepClass,
+                'stepAttempt' => $record->stepAttempt + 1,
+            ]);
+
             $changes['task_status'] = TaskStatus::QUEUED;
             $changes['step_status'] = StepStatus::QUEUED;
             $changes['step_attempt'] = $record->stepAttempt + 1;
@@ -322,6 +470,13 @@ class Runner {
         }
 
         if ($result->getStatus() === StepStatus::SUCCEEDED && $nextStep !== null) {
+            $this->logger->info('Runner queued next step.', [
+                'runnerId' => $this->runnerConfiguration->getRunnerId(),
+                'taskId' => $record->taskId,
+                'taskClass' => $record->taskClass,
+                'stepClass' => $nextStep::class,
+            ]);
+
             $changes['task_status'] = TaskStatus::QUEUED;
             $changes['step_class'] = $nextStep::class;
             $changes['step_status'] = StepStatus::QUEUED;
@@ -338,6 +493,13 @@ class Runner {
         $changes['cleanup_at'] = $now->add($cleanupAfter);
 
         if ($result->getStatus() === StepStatus::SUCCEEDED) {
+            $this->logger->info('Runner marked task as succeeded.', [
+                'runnerId' => $this->runnerConfiguration->getRunnerId(),
+                'taskId' => $record->taskId,
+                'taskClass' => $record->taskClass,
+                'stepClass' => $record->stepClass,
+            ]);
+
             $changes['task_status'] = TaskStatus::SUCCEEDED;
             $changes['step_status'] = StepStatus::SUCCEEDED;
 
@@ -345,11 +507,26 @@ class Runner {
         }
 
         if ($result->getStatus() === StepStatus::CANCELLED) {
+            $this->logger->warning('Runner marked task as cancelled.', [
+                'runnerId' => $this->runnerConfiguration->getRunnerId(),
+                'taskId' => $record->taskId,
+                'taskClass' => $record->taskClass,
+                'stepClass' => $record->stepClass,
+            ]);
+
             $changes['task_status'] = TaskStatus::CANCELLED;
             $changes['step_status'] = StepStatus::CANCELLED;
 
             return $changes;
         }
+
+        $this->logger->error('Runner marked task as failed.', [
+            'runnerId' => $this->runnerConfiguration->getRunnerId(),
+            'taskId' => $record->taskId,
+            'taskClass' => $record->taskClass,
+            'stepClass' => $record->stepClass,
+            'errorCode' => $result->getErrorInfo()?->getCode(),
+        ]);
 
         $changes['task_status'] = TaskStatus::FAILED;
         $changes['step_status'] = StepStatus::FAILED;

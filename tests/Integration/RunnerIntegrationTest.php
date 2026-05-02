@@ -21,9 +21,11 @@ use ByLexus\DurableTask\Tests\Fixture\RunnerExceptionTaskFixture;
 use ByLexus\DurableTask\Tests\Fixture\RunnerRetryTaskFixture;
 use ByLexus\DurableTask\Tests\Fixture\RunnerTimeoutTaskFixture;
 use ByLexus\DurableTask\Tests\Fixture\QueueWorkflowTaskFixture;
+use ByLexus\DurableTask\Tests\Fixture\ServiceAndLoggerInjectedTaskFixture;
 use ByLexus\DurableTask\Tests\Fixture\StepInjectedOnlyTaskFixture;
 use ByLexus\DurableTask\Tests\Support\PostgresIntegrationConnection;
 use ByLexus\DurableTask\Tests\Support\InMemoryContainer;
+use ByLexus\DurableTask\Tests\Support\SpyLogger;
 use PHPUnit\Framework\TestCase;
 
 final class RunnerIntegrationTest extends TestCase
@@ -64,6 +66,55 @@ final class RunnerIntegrationTest extends TestCase
             );
             self::assertNotNull($row['task_finished_at']);
             self::assertNotNull($row['cleanup_at']);
+        } finally {
+            PostgresIntegrationConnection::dropTableIfExists($pdo, $tableName);
+        }
+    }
+
+    public function testRunSingleEmitsLifecycleAndQueueLogsToConfiguredLogger(): void {
+        $pdo = PostgresIntegrationConnection::requirePdo($this);
+        $tableName = PostgresIntegrationConnection::uniqueTableName();
+
+        try {
+            $configuration = new QueueConfiguration($tableName);
+            $schemaManager = new SchemaManager($pdo, $configuration);
+            $schemaManager->bootstrap();
+
+            $logger = new SpyLogger();
+            $task = new QueueWorkflowTaskFixture($logger);
+            $task->setPayload(['job' => 'runner-logs']);
+            $record = $task->enqueue($pdo, $configuration);
+
+            self::assertNotNull($record->taskId);
+
+            $runner = new Runner(
+                $pdo,
+                $configuration,
+                new RunnerConfiguration('runner-logger-test', false, 30, null, $logger),
+            );
+
+            self::assertSame(1, $runner->runSingle());
+
+            self::assertTrue($logger->hasRecord('info', 'Task enqueue requested.'));
+            self::assertTrue($logger->hasRecord('info', 'Queue enqueue started.'));
+            self::assertTrue($logger->hasRecord('info', 'Queue claim succeeded.'));
+            self::assertTrue($logger->hasRecord('info', 'Runner executing step.'));
+            self::assertTrue($logger->hasRecord('info', 'Task step updated.'));
+            self::assertTrue($logger->hasRecord('info', 'Runner marked task as succeeded.'));
+
+            $executingRecord = $this->findLogRecord($logger, 'info', 'Runner executing step.');
+            $stepUpdatedRecord = $this->findLogRecord($logger, 'info', 'Task step updated.');
+
+            self::assertSame((int) $record->taskId, $executingRecord['context']['taskId'] ?? null);
+            self::assertSame(
+                \ByLexus\DurableTask\Tests\Fixture\QueueWorkflowStepFixture::class,
+                $executingRecord['context']['stepClass'] ?? null,
+            );
+            self::assertSame((int) $record->taskId, $stepUpdatedRecord['context']['taskId'] ?? null);
+            self::assertSame(
+                \ByLexus\DurableTask\Tests\Fixture\QueueWorkflowStepFixture::class,
+                $stepUpdatedRecord['context']['stepClass'] ?? null,
+            );
         } finally {
             PostgresIntegrationConnection::dropTableIfExists($pdo, $tableName);
         }
@@ -390,6 +441,61 @@ final class RunnerIntegrationTest extends TestCase
         }
     }
 
+    public function testRunSingleUsesRunnerLoggerWhenContainerDoesNotProvideLoggerService(): void {
+        $pdo = PostgresIntegrationConnection::requirePdo($this);
+        $tableName = PostgresIntegrationConnection::uniqueTableName();
+
+        try {
+            $configuration = new QueueConfiguration($tableName);
+            $schemaManager = new SchemaManager($pdo, $configuration);
+            $schemaManager->bootstrap();
+
+            $logger = new SpyLogger();
+            $service = new ConstructorInjectedServiceFixture('mailer');
+            $task = new ServiceAndLoggerInjectedTaskFixture($service, $logger);
+            $record = $task->enqueue($pdo, $configuration);
+
+            self::assertNotNull($record->taskId);
+
+            $runner = new Runner(
+                $pdo,
+                $configuration,
+                new RunnerConfiguration(
+                    'runner-container-logger-fallback',
+                    false,
+                    30,
+                    new InMemoryContainer([
+                        ConstructorInjectedServiceFixture::class => $service,
+                    ]),
+                    $logger,
+                ),
+            );
+
+            self::assertSame(1, $runner->runSingle());
+
+            $row = $this->fetchTaskRow($pdo, $tableName, (int) $record->taskId);
+
+            self::assertSame(TaskStatus::SUCCEEDED->value, $row['task_status']);
+            self::assertSame(StepStatus::SUCCEEDED->value, $row['step_status']);
+            self::assertSame('mailer', $row['payload_json']['taskService']);
+            self::assertSame('mailer', $row['payload_json']['stepService']);
+            self::assertSame(SpyLogger::class, $row['payload_json']['loggerClass']);
+            self::assertEquals(
+                [
+                    'status' => 'succeeded',
+                    'meta' => [
+                        'injectedStepService' => 'mailer',
+                        'loggerClass' => SpyLogger::class,
+                    ],
+                    'message' => null,
+                ],
+                $row['result_json'],
+            );
+        } finally {
+            PostgresIntegrationConnection::dropTableIfExists($pdo, $tableName);
+        }
+    }
+
     public function testRunSingleFailsClaimedTaskWhenInjectedTaskHasNoConfiguredContainer(): void {
         $pdo = PostgresIntegrationConnection::requirePdo($this);
         $tableName = PostgresIntegrationConnection::uniqueTableName();
@@ -419,7 +525,10 @@ final class RunnerIntegrationTest extends TestCase
             self::assertNull($row['claimed_at']);
             self::assertNull($row['claimed_by']);
             self::assertSame('0', $row['last_error_code']);
-            self::assertStringContainsString('requires a configured service container', (string) $row['last_error_message']);
+            self::assertStringContainsString(
+                'requires a configured service container',
+                (string) $row['last_error_message'],
+            );
             self::assertEquals(
                 [
                     'status' => 'failed',
@@ -465,7 +574,10 @@ final class RunnerIntegrationTest extends TestCase
             self::assertSame(TaskStatus::FAILED->value, $row['task_status']);
             self::assertSame(StepStatus::FAILED->value, $row['step_status']);
             self::assertSame('0', $row['last_error_code']);
-            self::assertStringContainsString('could not be resolved from the service container', (string) $row['last_error_message']);
+            self::assertStringContainsString(
+                'could not be resolved from the service container',
+                (string) $row['last_error_message'],
+            );
             self::assertStringContainsString('ConstructorInjectedStepFixture', (string) $row['last_error_message']);
         } finally {
             PostgresIntegrationConnection::dropTableIfExists($pdo, $tableName);
@@ -748,5 +860,18 @@ final class RunnerIntegrationTest extends TestCase
         }
 
         self::fail(sprintf('Expected marker file was not created: %s', $path));
+    }
+
+    /**
+     * @return array{level: string, message: string, context: array<string, mixed>}
+     */
+    private function findLogRecord(SpyLogger $logger, string $level, string $message): array {
+        foreach ($logger->getRecords() as $record) {
+            if ($record['level'] === $level && $record['message'] === $message) {
+                return $record;
+            }
+        }
+
+        self::fail(sprintf('Expected log record was not found: %s [%s]', $message, $level));
     }
 }

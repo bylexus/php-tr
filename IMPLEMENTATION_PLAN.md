@@ -27,6 +27,13 @@ The first version should not attempt to solve these concerns:
 - Distributed tracing, metrics backends, or dashboards.
 - Arbitrary step graphs beyond task-controlled linear or conditional progression.
 
+## Confirmed Clarifications For Logging
+
+- Logging uses `psr/log` as a runtime Composer dependency.
+- `Task` and `Step` both support constructor injection and post-construction logger assignment.
+- If no logger is configured on the runner, the runner resolves a `NullLogger` no-op implementation.
+- The implementation must explicitly log queue operations, task and step lifecycle events, status transitions, and errors or exceptions.
+
 ## Confirmed Design Decisions
 
 - Metadata uses PHP 8 attributes, not docblock annotations.
@@ -41,6 +48,7 @@ The first version should not attempt to solve these concerns:
 - Metadata persistence: Persisting class names are sufficient, no other metadata needed.
 - No task or step history tables are needed in V1.
 - Succeeded and failed task rows are retained only temporarily and then deleted according to task-level cleanup metadata.
+- Logging is PSR-3 based and uses one runner-resolved logger instance per execution path.
 
 ## Proposed Package Layout
 
@@ -125,6 +133,14 @@ Important rule:
 - `Task` owns workflow orchestration only. It must not perform queue SQL directly.
 - Concrete task classes must remain reconstructable from persisted class names. The exact constructor-resolution contract is under review because PSR-11-based service lookup is now a requested feature.
 
+Additional logging contract:
+
+- `Task` accepts an optional `Psr\Log\LoggerInterface` in its base constructor.
+- `Task` stores the logger internally and exposes `setLogger()` and `getLogger()`.
+- Child task classes with their own constructor remain responsible for calling the parent constructor when they want constructor injection.
+- Base construction should log task creation when a logger is available.
+- Task workflow methods such as `nextStep()` and `updateStep()` should be able to emit task-scoped log entries through `getLogger()`.
+
 ### Step Base Class
 
 Responsibilities:
@@ -140,6 +156,85 @@ Important rules:
 - `Step` must receive the owning `Task` instance during execution and use the task as the single source of truth for payload access and mutation.
 - `Step` should be reconstructable from persisted queue metadata; payload reconstruction remains task-owned.
 - Concrete step classes must remain reconstructable from persisted queue metadata. The exact constructor-resolution contract is under review because PSR-11-based service lookup is now a requested feature.
+
+Additional logging contract:
+
+- `Step` accepts an optional `Psr\Log\LoggerInterface` in its base constructor.
+- `Step` stores the logger internally and exposes `setLogger()` and `getLogger()`.
+- Child step classes with their own constructor remain responsible for calling the parent constructor when they want constructor injection.
+- Base construction should log step creation when a logger is available.
+- Step business logic may use `getLogger()` for task-scoped operational logging during `execute(Task $task)`.
+
+### PSR-3 Logging
+
+The library should add structured operational logging without changing the task persistence model.
+
+Required behavior:
+
+- Add `psr/log` as a runtime dependency and type against `Psr\Log\LoggerInterface`.
+- Extend `RunnerConfiguration` to accept an optional logger and expose it through an accessor.
+- On runner construction, resolve one active logger instance from `RunnerConfiguration`; if none is configured, use `Psr\Log\NullLogger` as the default no-op `LoggerInterface` implementation.
+- Pass the active logger into queue-facing and domain-facing execution paths so queue operations and task execution share the same logger for a claimed record.
+- After reconstructing a task and its current step, the runner must call `setLogger()` on both instances so logger availability does not depend on constructor injection alone.
+- Constructor injection remains supported through the existing PSR-11 container path when the container can resolve `LoggerInterface`; post-construction `setLogger()` is still applied so both injection styles converge on the same active logger.
+
+Logging scope:
+
+- Task creation.
+- Step creation.
+- Task hydration from claimed queue records.
+- Step hydration from claimed queue records.
+- `Task::nextStep()` decisions, including whether a next step exists and which step class was selected.
+- `Task::updateStep()` transitions.
+- Queue enqueue, claim, update, notification, and expired-row deletion operations.
+- Task and step status changes, including retries, cancellation, success, and failure transitions.
+- All execution errors, instantiation failures, queue failures, and caught exceptions.
+
+Logging ownership:
+
+- `Task` and `Step` log domain-level lifecycle and business-level context.
+- `Runner` logs orchestration-level decisions, execution start and end, retry handling, cancellation handling, timeout handling, and exception paths.
+- `PostgresQueue` logs queue-level state changes and notification activity.
+- `NullLogger` remains the default fallback only; users may still inject any PSR-3 compatible logger.
+
+Recommended log context fields:
+
+- `taskId`
+- `taskClass`
+- `stepClass`
+- `taskStatus`
+- `stepStatus`
+- `taskAttempt`
+- `stepAttempt`
+- `runnerId`
+- `availableAt`
+- `claimedAt`
+- `claimedBy`
+- `errorCode`
+- `exceptionClass`
+
+Affected implementation areas:
+
+- `composer.json`: add `psr/log`.
+- `src/Task.php`: add logger storage, constructor, accessors, and task lifecycle log points.
+- `src/Step.php`: add logger storage, constructor, accessors, and step lifecycle log points.
+- `src/RunnerConfiguration.php`: add logger support.
+- `src/Runner.php`: resolve the active logger, default it to `NullLogger`, propagate it to reconstructed tasks and steps, and log orchestration transitions and exceptions.
+- `src/Queue/PostgresQueue.php`: accept or resolve the active logger for queue operation logging.
+- Tests under `tests/`: add coverage for logger propagation, `NullLogger` fallback resolution, and required log emission points.
+
+Recommended implementation sequence:
+
+1. Add `psr/log` and extend the task, step, and runner configuration APIs to carry a logger.
+2. Implement `NullLogger` fallback resolution for runner-managed execution paths.
+3. Update runner initialization so one active logger is resolved and reused throughout a claimed record lifecycle.
+4. Apply logger propagation after task and step reconstruction and keep constructor injection compatibility through the existing container path.
+5. Add log statements to queue operations, task and step lifecycle methods, and runner execution branches.
+6. Add unit and integration tests that assert logger availability and verify the required events are emitted.
+
+Open implementation constraint:
+
+- Because plain task and step instantiation currently happens through `ClassInstantiator`, constructor injection of `LoggerInterface` only works when the configured PSR-11 container exposes that service. The runner must therefore still call `setLogger()` after reconstruction so logging remains available even when a child class uses a no-argument constructor.
 
 ### Task-Owned Payload Refactor
 

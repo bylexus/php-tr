@@ -6,9 +6,11 @@ use ByLexus\DurableTask\Result\StepResult;
 use ByLexus\DurableTask\Step;
 use ByLexus\DurableTask\Task;
 use PHPMailer\PHPMailer\PHPMailer;
+use Psr\Log\LoggerInterface;
 
 class SendMailStep extends Step {
-    public function __construct(protected PHPMailer $mailer) {
+    public function __construct(protected PHPMailer $mailer, ?LoggerInterface $logger = null) {
+        parent::__construct(logger: $logger);
     }
 
     public function execute(Task $task): StepResult {
