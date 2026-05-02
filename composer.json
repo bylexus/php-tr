@@ -4,8 +4,9 @@
     "version": "0.0.1",
     "type": "library",
     "require": {
+        "ext-pdo": "*",
         "php": "^8.3",
-        "ext-pdo": "*"
+        "psr/container": "^2.0"
     },
     "require-dev": {
         "phpmailer/phpmailer": "^7.0",

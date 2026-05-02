@@ -13,13 +13,17 @@ use ByLexus\DurableTask\Queue\SchemaManager;
 use ByLexus\DurableTask\Runner;
 use ByLexus\DurableTask\RunnerConfiguration;
 use ByLexus\DurableTask\Task;
+use ByLexus\DurableTask\Tests\Fixture\ConstructorInjectedServiceFixture;
+use ByLexus\DurableTask\Tests\Fixture\ConstructorInjectedTaskFixture;
 use ByLexus\DurableTask\Tests\Fixture\PayloadHandoffTaskFixture;
 use ByLexus\DurableTask\Tests\Fixture\PayloadMutationTaskFixture;
 use ByLexus\DurableTask\Tests\Fixture\RunnerExceptionTaskFixture;
 use ByLexus\DurableTask\Tests\Fixture\RunnerRetryTaskFixture;
 use ByLexus\DurableTask\Tests\Fixture\RunnerTimeoutTaskFixture;
 use ByLexus\DurableTask\Tests\Fixture\QueueWorkflowTaskFixture;
+use ByLexus\DurableTask\Tests\Fixture\StepInjectedOnlyTaskFixture;
 use ByLexus\DurableTask\Tests\Support\PostgresIntegrationConnection;
+use ByLexus\DurableTask\Tests\Support\InMemoryContainer;
 use PHPUnit\Framework\TestCase;
 
 final class RunnerIntegrationTest extends TestCase
@@ -336,6 +340,133 @@ final class RunnerIntegrationTest extends TestCase
                 ],
                 $row['result_json'],
             );
+        } finally {
+            PostgresIntegrationConnection::dropTableIfExists($pdo, $tableName);
+        }
+    }
+
+    public function testRunSingleResolvesConstructorDependenciesFromConfiguredContainer(): void {
+        $pdo = PostgresIntegrationConnection::requirePdo($this);
+        $tableName = PostgresIntegrationConnection::uniqueTableName();
+
+        try {
+            $configuration = new QueueConfiguration($tableName);
+            $schemaManager = new SchemaManager($pdo, $configuration);
+            $schemaManager->bootstrap();
+
+            $service = new ConstructorInjectedServiceFixture('mailer');
+            $task = new ConstructorInjectedTaskFixture($service);
+            $record = $task->enqueue($pdo, $configuration);
+
+            self::assertNotNull($record->taskId);
+
+            $runner = new Runner(
+                $pdo,
+                $configuration,
+                new RunnerConfiguration(
+                    'runner-container-success',
+                    false,
+                    30,
+                    new InMemoryContainer([
+                        ConstructorInjectedServiceFixture::class => $service,
+                    ]),
+                ),
+            );
+
+            self::assertSame(1, $runner->runSingle());
+
+            $row = $this->fetchTaskRow($pdo, $tableName, (int) $record->taskId);
+
+            self::assertSame(TaskStatus::SUCCEEDED->value, $row['task_status']);
+            self::assertSame(StepStatus::SUCCEEDED->value, $row['step_status']);
+            self::assertSame('mailer', $row['payload_json']['taskService']);
+            self::assertSame('mailer', $row['payload_json']['stepService']);
+            self::assertEquals(
+                ['status' => 'succeeded', 'meta' => ['injectedStepService' => 'mailer'], 'message' => null],
+                $row['result_json'],
+            );
+        } finally {
+            PostgresIntegrationConnection::dropTableIfExists($pdo, $tableName);
+        }
+    }
+
+    public function testRunSingleFailsClaimedTaskWhenInjectedTaskHasNoConfiguredContainer(): void {
+        $pdo = PostgresIntegrationConnection::requirePdo($this);
+        $tableName = PostgresIntegrationConnection::uniqueTableName();
+
+        try {
+            $configuration = new QueueConfiguration($tableName);
+            $schemaManager = new SchemaManager($pdo, $configuration);
+            $schemaManager->bootstrap();
+
+            $task = new ConstructorInjectedTaskFixture(new ConstructorInjectedServiceFixture('mailer'));
+            $record = $task->enqueue($pdo, $configuration);
+
+            self::assertNotNull($record->taskId);
+
+            $runner = new Runner(
+                $pdo,
+                $configuration,
+                new RunnerConfiguration('runner-container-missing'),
+            );
+
+            self::assertSame(1, $runner->runSingle());
+
+            $row = $this->fetchTaskRow($pdo, $tableName, (int) $record->taskId);
+
+            self::assertSame(TaskStatus::FAILED->value, $row['task_status']);
+            self::assertSame(StepStatus::FAILED->value, $row['step_status']);
+            self::assertNull($row['claimed_at']);
+            self::assertNull($row['claimed_by']);
+            self::assertSame('0', $row['last_error_code']);
+            self::assertStringContainsString('requires a configured service container', (string) $row['last_error_message']);
+            self::assertEquals(
+                [
+                    'status' => 'failed',
+                    'meta' => ['instantiationFailed' => true],
+                    'message' => $row['last_error_message'],
+                ],
+                $row['result_json'],
+            );
+        } finally {
+            PostgresIntegrationConnection::dropTableIfExists($pdo, $tableName);
+        }
+    }
+
+    public function testRunSingleFailsClaimedTaskWhenInjectedStepServiceIsMissing(): void {
+        $pdo = PostgresIntegrationConnection::requirePdo($this);
+        $tableName = PostgresIntegrationConnection::uniqueTableName();
+
+        try {
+            $configuration = new QueueConfiguration($tableName);
+            $schemaManager = new SchemaManager($pdo, $configuration);
+            $schemaManager->bootstrap();
+
+            $task = new StepInjectedOnlyTaskFixture();
+            $record = $task->enqueue($pdo, $configuration);
+
+            self::assertNotNull($record->taskId);
+
+            $runner = new Runner(
+                $pdo,
+                $configuration,
+                new RunnerConfiguration(
+                    'runner-service-missing',
+                    false,
+                    30,
+                    new InMemoryContainer([]),
+                ),
+            );
+
+            self::assertSame(1, $runner->runSingle());
+
+            $row = $this->fetchTaskRow($pdo, $tableName, (int) $record->taskId);
+
+            self::assertSame(TaskStatus::FAILED->value, $row['task_status']);
+            self::assertSame(StepStatus::FAILED->value, $row['step_status']);
+            self::assertSame('0', $row['last_error_code']);
+            self::assertStringContainsString('could not be resolved from the service container', (string) $row['last_error_message']);
+            self::assertStringContainsString('ConstructorInjectedStepFixture', (string) $row['last_error_message']);
         } finally {
             PostgresIntegrationConnection::dropTableIfExists($pdo, $tableName);
         }

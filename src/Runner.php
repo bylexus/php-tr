@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace ByLexus\DurableTask;
 
+use ByLexus\DurableTask\Attribute\CleanupAfter;
 use ByLexus\DurableTask\Enum\StepStatus;
 use ByLexus\DurableTask\Enum\TaskStatus;
+use ByLexus\DurableTask\Exception\ConfigurationException;
 use ByLexus\DurableTask\Metadata\MetadataResolver;
 use ByLexus\DurableTask\Queue\PostgresQueue;
 use ByLexus\DurableTask\Queue\QueueConfiguration;
@@ -136,15 +138,21 @@ class Runner {
     }
 
     private function processClaimedRecord(QueueRecord $record): void {
-        $task = Task::fromQueueRecord($record);
-        $step = $task->actualStep();
+        try {
+            $task = Task::fromQueueRecord($record, $this->runnerConfiguration->getContainer());
+            $step = $task->actualStep();
 
-        if ($step === null) {
-            throw new \RuntimeException(sprintf('Claimed queue row %d has no executable step.', $record->taskId));
+            if ($step === null) {
+                throw new ConfigurationException(sprintf('Claimed queue row %d has no executable step.', $record->taskId));
+            }
+
+            $taskMetadata = $this->metadataResolver->resolveTaskMetadata($record->taskClass);
+            $stepMetadata = $this->metadataResolver->resolveStepMetadata($record->stepClass ?? '', $taskMetadata);
+        } catch (\Throwable $throwable) {
+            $this->persistClaimFailure($record, $throwable);
+
+            return;
         }
-
-        $taskMetadata = $this->metadataResolver->resolveTaskMetadata($record->taskClass);
-        $stepMetadata = $this->metadataResolver->resolveStepMetadata($record->stepClass ?? '', $taskMetadata);
 
         $result = $this->resolveExecutionResult($record, $task, $step, $stepMetadata->getMaxRuntime());
 
@@ -226,6 +234,49 @@ class Runner {
         }
 
         return $result;
+    }
+
+    private function persistClaimFailure(QueueRecord $record, \Throwable $throwable): void {
+        $now = new \DateTimeImmutable('now', new \DateTimeZone('UTC'));
+        $errorCode = (int) $throwable->getCode();
+        $errorInfo = new ErrorInfo(
+            $errorCode,
+            $throwable->getMessage(),
+            ['exception' => $throwable::class],
+        );
+
+        $this->connection->beginTransaction();
+
+        try {
+            $this->queue->update(
+                (int) $record->taskId,
+                [
+                    'task_status' => TaskStatus::FAILED,
+                    'step_status' => StepStatus::FAILED,
+                    'task_finished_at' => $now,
+                    'step_finished_at' => $now,
+                    'cleanup_at' => $now->add($this->resolveCleanupAfterInterval($record)),
+                    'result_json' => [
+                        'status' => StepStatus::FAILED->value,
+                        'meta' => ['instantiationFailed' => true],
+                        'message' => $throwable->getMessage(),
+                    ],
+                    'error_json' => $this->normalizeErrorInfo($errorInfo),
+                    'last_error_code' => (string) $errorCode,
+                    'last_error_message' => $throwable->getMessage(),
+                    'claimed_at' => null,
+                    'claimed_by' => null,
+                ],
+                true,
+            );
+            $this->connection->commit();
+        } catch (\Throwable $updateThrowable) {
+            if ($this->connection->inTransaction()) {
+                $this->connection->rollBack();
+            }
+
+            throw $updateThrowable;
+        }
     }
 
     /**
@@ -319,6 +370,14 @@ class Runner {
             'message' => $errorInfo->getMessage(),
             'details' => $errorInfo->getDetails(),
         ];
+    }
+
+    private function resolveCleanupAfterInterval(QueueRecord $record): \DateInterval {
+        try {
+            return $this->metadataResolver->resolveTaskMetadata($record->taskClass)->getCleanupAfter();
+        } catch (\Throwable) {
+            return new \DateInterval(CleanupAfter::DEFAULT_SPEC);
+        }
     }
 
     private function hasExceededMaxRuntime(QueueRecord $record, \DateInterval $maxRuntime): bool {

@@ -21,7 +21,7 @@ V1 will implement a PostgreSQL-backed durable task library for PHP with these ch
 The first version should not attempt to solve these concerns:
 
 - Storage backends other than PostgreSQL.
-- Framework-specific dependency injection integration.
+- Framework-specific dependency injection integration beyond a generic PSR-11 container lookup.
 - Delayed scheduling or cron-like dispatch.
 - In-process concurrency or threading.
 - Distributed tracing, metrics backends, or dashboards.
@@ -123,7 +123,7 @@ Proposed responsibilities for the base API:
 Important rule:
 
 - `Task` owns workflow orchestration only. It must not perform queue SQL directly.
-- Concrete task classes must be instantiatable through a default constructor so the library can rebuild them from persisted class names.
+- Concrete task classes must remain reconstructable from persisted class names. The exact constructor-resolution contract is under review because PSR-11-based service lookup is now a requested feature.
 
 ### Step Base Class
 
@@ -139,7 +139,7 @@ Important rules:
 - `Step` must not own or cache payload state.
 - `Step` must receive the owning `Task` instance during execution and use the task as the single source of truth for payload access and mutation.
 - `Step` should be reconstructable from persisted queue metadata; payload reconstruction remains task-owned.
-- Concrete step classes must be instantiatable through a default constructor so the library can rebuild them directly.
+- Concrete step classes must remain reconstructable from persisted queue metadata. The exact constructor-resolution contract is under review because PSR-11-based service lookup is now a requested feature.
 
 ### Task-Owned Payload Refactor
 
@@ -568,30 +568,38 @@ Because PHP cannot reliably kill arbitrary user code safely, the implementation 
 
 ## Instantiation And Dependency Boundaries
 
-This is the weakest point in the original concept and needs an explicit V1 rule.
+The current implementation hardcodes direct zero-argument instantiation in `Task::fromQueueRecord()` and `Step::fromQueueRecord()`. That is no longer sufficient for the requested constructor-injection feature.
 
-Problem:
+Requested direction:
 
-- Tasks and steps in the examples accept service dependencies in their constructors.
-- A framework-agnostic library cannot reconstruct arbitrary objects from persisted class names alone.
+- `RunnerConfiguration` should optionally receive a PSR-11 compatible service container when the runner is created.
+- Task and step subclasses should be allowed to declare class-based constructor parameters such as `__construct(Mailer $mailer)`.
+- The runner should inspect constructors via reflection and try to resolve each class-typed dependency from the configured container.
+- If dependency resolution fails, the claimed work item should be marked as failed instead of crashing the runner process and leaving the claimed row unresolved.
 
-Recommended V1 solution:
+Current assessment:
 
-- Persist class names and payload only.
-- The library instantiates task and step classes directly from their persisted class names.
-- Therefore, concrete task and step classes must provide a default constructor with no required parameters.
+- The current runner only converts exceptions thrown during `Step::execute()` into a failed `StepResult`. Instantiation failures happen earlier during task and step reconstruction, so additional failure-persistence rules are required.
+- The package currently has no runtime dependency on `psr/container`, so Composer metadata must change as part of the feature.
 
-This keeps the library simple and avoids introducing additional factory abstractions.
+Confirmed impacts in the codebase:
 
-Required consequence:
+- `src/RunnerConfiguration.php` needs a new optional container field and accessor.
+- `src/Runner.php` needs a dedicated reconstruction path that can resolve constructor dependencies and persist terminal failure when reconstruction fails.
+- `src/Task.php` and `src/Step.php` should stop directly calling `new $className()` and instead delegate to a shared instantiation service or helper.
+- Tests must cover both successful service resolution and runner-visible failure persistence when resolution fails.
 
-- `Task::enqueue()` must persist enough information to reconstruct the task later, which means task class name plus payload, but not concrete service objects.
-- Constructor injection for task and step implementations is out of scope for V1.
+Confirmed feature rules:
 
-Implementation consequence:
+1. Add `psr/container` as a runtime Composer dependency and type the optional runner container as `Psr\Container\ContainerInterface`.
+2. Constructor injection supports only resolvable class or interface parameters. Constructors with scalar parameters, default-value fallbacks, union types, intersection types, variadics, or untyped parameters are invalid for runner-side reconstruction.
+3. Any constructor parameter that cannot be resolved through the configured container is invalid and must fail reconstruction.
+4. Every constructor-resolution failure is fatal and non-retryable. Retry metadata does not apply to task or step reconstruction failures.
+5. Instantiation failures must persist a terminal failure state by updating all relevant queue diagnostics: `task_status`, `step_status`, `error_json`, `last_error_code`, and `last_error_message`.
+6. Constructor resolvability is checked only when the runner claims work. Enqueue-time and workflow-definition-time validation remain the caller's responsibility.
+7. Container-aware reconstruction is not runner-internal only. Every library path that reconstructs a task or step without an already-instantiated object must use the same container-aware instantiation logic.
 
-- Any runtime dependencies needed by concrete tasks or steps must be acquired without required constructor arguments.
-- The first version should assume tasks and steps are plain instantiable classes with internal logic based on payload and static configuration.
+With these decisions, the feature is now specified enough to implement.
 
 ## Retry, Failure, And Cancellation Semantics
 

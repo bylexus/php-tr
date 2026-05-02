@@ -8,6 +8,8 @@ use ByLexus\DurableTask\Enum\StepStatus;
 use ByLexus\DurableTask\Exception\ConfigurationException;
 use ByLexus\DurableTask\Queue\QueueRecord;
 use ByLexus\DurableTask\Result\StepResult;
+use ByLexus\DurableTask\Runtime\ClassInstantiator;
+use Psr\Container\ContainerInterface;
 
 abstract class Step {
     private ?int $taskId = null;
@@ -40,29 +42,12 @@ abstract class Step {
         return $this->finishedAt;
     }
 
-    public static function fromQueueRecord(QueueRecord $record): ?self {
+    public static function fromQueueRecord(QueueRecord $record, ?ContainerInterface $container = null): ?self {
         if ($record->stepClass === null) {
             return null;
         }
 
-        if (!class_exists($record->stepClass)) {
-            throw new ConfigurationException(sprintf('Step class does not exist: %s', $record->stepClass));
-        }
-
-        try {
-            $step = new $record->stepClass();
-        } catch (\Throwable $throwable) {
-            throw new ConfigurationException(
-                sprintf('Step class must be instantiatable without arguments: %s', $record->stepClass),
-                0,
-                $throwable,
-            );
-        }
-
-        if (!$step instanceof self) {
-            throw new ConfigurationException(sprintf('Configured step class must extend Step: %s', $record->stepClass));
-        }
-
+        $step = ClassInstantiator::instantiate($record->stepClass, self::class, self::class, $container);
         $step->hydrateFromQueueRecord($record);
 
         return $step;

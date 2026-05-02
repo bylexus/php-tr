@@ -3,12 +3,15 @@
 use ByLexus\DurableTask\Attribute\CleanupAfter;
 use ByLexus\DurableTask\Step;
 use ByLexus\DurableTask\Task;
+use PHPMailer\PHPMailer\PHPMailer;
 
 require_once(__DIR__ . '/GetChuckNorrisJokeStep.php');
 require_once(__DIR__ . '/SendMailStep.php');
 
 #[CleanupAfter(new DateInterval('PT1H'))]
 class ChuckNorrisNewsletterTask extends Task {
+    public function __construct(protected PHPMailer $mailer) {
+    }
     public function nextStep(?Step $actStep = null): ?Step {
         if (!$actStep) {
             return new GetChuckNorrisJokeStep();
@@ -18,7 +21,7 @@ class ChuckNorrisNewsletterTask extends Task {
             $this->setSubject('Your daily Chuck Norris Joke');
             $this->setBody($joke);
 
-            return new SendMailStep();
+            return new SendMailStep($this->mailer);
         }
 
         return null;

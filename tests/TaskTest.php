@@ -9,9 +9,14 @@ use ByLexus\DurableTask\Enum\TaskStatus;
 use ByLexus\DurableTask\Exception\ConfigurationException;
 use ByLexus\DurableTask\Queue\QueueRecord;
 use ByLexus\DurableTask\Task;
+use ByLexus\DurableTask\Tests\Fixture\ConstructorInjectedServiceFixture;
+use ByLexus\DurableTask\Tests\Fixture\ConstructorInjectedTaskFixture;
 use ByLexus\DurableTask\Tests\Fixture\EmptyWorkflowTaskFixture;
 use ByLexus\DurableTask\Tests\Fixture\QueueWorkflowStepFixture;
 use ByLexus\DurableTask\Tests\Fixture\QueueWorkflowTaskFixture;
+use ByLexus\DurableTask\Tests\Fixture\ScalarConstructorTaskFixture;
+use ByLexus\DurableTask\Tests\Fixture\StepInjectedOnlyTaskFixture;
+use ByLexus\DurableTask\Tests\Support\InMemoryContainer;
 use PHPUnit\Framework\TestCase;
 
 final class TaskTest extends TestCase
@@ -152,5 +157,147 @@ final class TaskTest extends TestCase
         $this->expectExceptionMessage('Root payload must be null, an array, or an object.');
 
         $task->setPayload('invalid-root-payload');
+    }
+
+    public function testTaskCanBeReconstitutedWithContainerResolvedConstructorDependencies(): void {
+        $record = new QueueRecord(
+            42,
+            ConstructorInjectedTaskFixture::class,
+            \ByLexus\DurableTask\Tests\Fixture\ConstructorInjectedStepFixture::class,
+            TaskStatus::QUEUED->value,
+            1,
+            new \DateTimeImmutable('2026-01-01T00:00:00+00:00'),
+            null,
+            null,
+            null,
+            StepStatus::QUEUED->value,
+            2,
+            null,
+            null,
+            ['foo' => 'bar'],
+            null,
+            null,
+            new \DateTimeImmutable('2026-01-01T00:00:00+00:00'),
+            null,
+            null,
+            null,
+            null,
+            false,
+            null,
+            new \DateTimeImmutable('2026-01-01T00:00:00+00:00'),
+        );
+        $service = new ConstructorInjectedServiceFixture('mailer');
+        $container = new InMemoryContainer([
+            ConstructorInjectedServiceFixture::class => $service,
+        ]);
+
+        $task = Task::fromQueueRecord($record, $container);
+
+        self::assertInstanceOf(ConstructorInjectedTaskFixture::class, $task);
+        self::assertSame('mailer', $task->getInjectedServiceName());
+        self::assertInstanceOf(\ByLexus\DurableTask\Tests\Fixture\ConstructorInjectedStepFixture::class, $task->actualStep());
+    }
+
+    public function testTaskReconstitutionFailsWithoutContainerForInjectedTask(): void {
+        $record = new QueueRecord(
+            42,
+            ConstructorInjectedTaskFixture::class,
+            QueueWorkflowStepFixture::class,
+            TaskStatus::QUEUED->value,
+            1,
+            new \DateTimeImmutable('2026-01-01T00:00:00+00:00'),
+            null,
+            null,
+            null,
+            StepStatus::QUEUED->value,
+            2,
+            null,
+            null,
+            ['foo' => 'bar'],
+            null,
+            null,
+            new \DateTimeImmutable('2026-01-01T00:00:00+00:00'),
+            null,
+            null,
+            null,
+            null,
+            false,
+            null,
+            new \DateTimeImmutable('2026-01-01T00:00:00+00:00'),
+        );
+
+        $this->expectException(ConfigurationException::class);
+        $this->expectExceptionMessage('Task class requires a configured service container');
+
+        Task::fromQueueRecord($record);
+    }
+
+    public function testTaskReconstitutionFailsWhenStepDependencyCannotBeResolved(): void {
+        $record = new QueueRecord(
+            42,
+            StepInjectedOnlyTaskFixture::class,
+            \ByLexus\DurableTask\Tests\Fixture\ConstructorInjectedStepFixture::class,
+            TaskStatus::QUEUED->value,
+            1,
+            new \DateTimeImmutable('2026-01-01T00:00:00+00:00'),
+            null,
+            null,
+            null,
+            StepStatus::QUEUED->value,
+            2,
+            null,
+            null,
+            ['foo' => 'bar'],
+            null,
+            null,
+            new \DateTimeImmutable('2026-01-01T00:00:00+00:00'),
+            null,
+            null,
+            null,
+            null,
+            false,
+            null,
+            new \DateTimeImmutable('2026-01-01T00:00:00+00:00'),
+        );
+
+        $this->expectException(ConfigurationException::class);
+        $this->expectExceptionMessage('Step class requires a configured service container');
+
+        Task::fromQueueRecord($record);
+    }
+
+    public function testTaskReconstitutionRejectsUnsupportedConstructorParameterKinds(): void {
+        $record = new QueueRecord(
+            42,
+            ScalarConstructorTaskFixture::class,
+            QueueWorkflowStepFixture::class,
+            TaskStatus::QUEUED->value,
+            1,
+            new \DateTimeImmutable('2026-01-01T00:00:00+00:00'),
+            null,
+            null,
+            null,
+            StepStatus::QUEUED->value,
+            2,
+            null,
+            null,
+            ['foo' => 'bar'],
+            null,
+            null,
+            new \DateTimeImmutable('2026-01-01T00:00:00+00:00'),
+            null,
+            null,
+            null,
+            null,
+            false,
+            null,
+            new \DateTimeImmutable('2026-01-01T00:00:00+00:00'),
+        );
+        $container = new InMemoryContainer([]);
+
+        $this->expectException(ConfigurationException::class);
+        $this->expectExceptionMessage('Task class constructor parameter $name must be a resolvable class or interface type');
+
+        Task::fromQueueRecord($record, $container);
     }
 }

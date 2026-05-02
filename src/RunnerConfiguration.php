@@ -4,20 +4,25 @@ declare(strict_types=1);
 
 namespace ByLexus\DurableTask;
 
+use Psr\Container\ContainerInterface;
+
 final class RunnerConfiguration
 {
     private bool $bootstrapSchemaOnStart;
     private int $notificationWaitTimeoutSeconds;
     private string $runnerId;
+    private ?ContainerInterface $container;
 
     public function __construct(
         ?string $runnerId = null,
         bool $bootstrapSchemaOnStart = false,
         int $notificationWaitTimeoutSeconds = 30,
+        ?ContainerInterface $container = null,
     ) {
         $this->runnerId = $runnerId ?? self::generateRunnerId();
         $this->bootstrapSchemaOnStart = $bootstrapSchemaOnStart;
         $this->notificationWaitTimeoutSeconds = $notificationWaitTimeoutSeconds;
+        $this->container = $container;
     }
 
     public function getRunnerId(): string {
@@ -30,6 +35,10 @@ final class RunnerConfiguration
 
     public function getNotificationWaitTimeoutSeconds(): int {
         return $this->notificationWaitTimeoutSeconds;
+    }
+
+    public function getContainer(): ?ContainerInterface {
+        return $this->container;
     }
 
     private static function generateRunnerId(): string {

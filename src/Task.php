@@ -11,6 +11,8 @@ use ByLexus\DurableTask\Queue\PostgresQueue;
 use ByLexus\DurableTask\Queue\QueueConfiguration;
 use ByLexus\DurableTask\Queue\QueueRecord;
 use ByLexus\DurableTask\Result\StepResult;
+use ByLexus\DurableTask\Runtime\ClassInstantiator;
+use Psr\Container\ContainerInterface;
 
 abstract class Task {
     private mixed $payload = null;
@@ -147,26 +149,9 @@ abstract class Task {
         $this->actualStep = $step;
     }
 
-    public static function fromQueueRecord(QueueRecord $record): self {
-        if (!class_exists($record->taskClass)) {
-            throw new ConfigurationException(sprintf('Task class does not exist: %s', $record->taskClass));
-        }
-
-        try {
-            $task = new $record->taskClass();
-        } catch (\Throwable $throwable) {
-            throw new ConfigurationException(
-                sprintf('Task class must be instantiatable without arguments: %s', $record->taskClass),
-                0,
-                $throwable,
-            );
-        }
-
-        if (!$task instanceof self) {
-            throw new ConfigurationException(sprintf('Configured task class must extend Task: %s', $record->taskClass));
-        }
-
-        $actualStep = Step::fromQueueRecord($record);
+    public static function fromQueueRecord(QueueRecord $record, ?ContainerInterface $container = null): self {
+        $task = ClassInstantiator::instantiate($record->taskClass, self::class, self::class, $container);
+        $actualStep = Step::fromQueueRecord($record, $container);
         $task->hydrateFromQueueRecord($record, $actualStep);
 
         return $task;

@@ -104,6 +104,25 @@
 - [x] Rewrite unit and integration assertions that currently inspect payload through `actualStep()` so they validate task-owned payload behavior instead.
 
 
+## PSR-11 Constructor Injection Support
+
+- [x] Confirm the container contract for `RunnerConfiguration`: use `psr/container` and `Psr\Container\ContainerInterface`.
+- [x] Confirm supported constructor signatures: class/interface parameters only, with no defaults or unresolved parameters.
+- [x] Confirm constructor-resolution failures are terminal and non-retryable.
+- [x] Confirm instantiation failures before `execute()` must persist `task_status`, `step_status`, `error_json`, `last_error_code`, and `last_error_message`.
+- [x] Confirm constructor resolvability is checked only when a runner claims work.
+- [x] Confirm all library reconstruction paths must use the same container-aware instantiation logic.
+- [x] Add `psr/container` as a runtime Composer dependency.
+- [x] Add an optional service container to `RunnerConfiguration`.
+- [x] Introduce a shared constructor-resolution path for task and step reconstruction based on reflection plus container lookup.
+- [x] Reject unsupported constructor parameter kinds with a configuration error that includes the class and parameter name.
+- [x] Refactor runner claim processing so instantiation failures are persisted as task failures instead of bubbling out and leaving claimed work unresolved.
+- [x] Define and implement the exact persisted failure state for task-construction and step-construction errors.
+- [x] Update all reconstruction call sites so they can use the shared container-aware instantiation path.
+- [x] Add unit tests for constructor resolution success and failure cases on both tasks and steps.
+- [x] Add integration coverage for missing-container and missing-service scenarios.
+
+
 ## Arbitary notes
 
 - add logger infrastructure
