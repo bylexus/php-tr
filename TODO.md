@@ -70,11 +70,11 @@
 
 ## Phase 8: Examples And Documentation
 
-- [ ] Add one example workflow.
-- [ ] Document installation and runner usage.
-- [ ] Document attribute behavior.
-- [ ] Document schema bootstrap options and DDL export usage.
-- [ ] Document operational constraints and non-goals.
+- [x] Add one example workflow.
+- [x] Document installation and runner usage.
+- [x] Document attribute behavior.
+- [x] Document schema bootstrap options and DDL export usage.
+- [x] Document operational constraints and non-goals.
 - [ ] Verify a new user can understand the mental model and run the example locally.
 - [ ] Verify a new user can understand how to create the schema through explicit bootstrap or exported DDL.
 
@@ -144,4 +144,4 @@
 
 ## Arbitary notes
 
-- during singal shutdown, cleanup quueue: running tasks should be reset to queued
+- during singal shutdown, cleanup queue: running tasks should be reset to queued

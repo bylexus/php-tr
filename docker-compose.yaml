@@ -1,4 +1,14 @@
 services:
+    php:
+        build:
+            context: docker/php
+            dockerfile: Dockerfile
+        command: ["tail", "-f", "/dev/null"]
+        working_dir: /src
+        env_file:
+            - .env.docker
+        volumes:
+          - .:/src
     db:
         image: postgres:17
         ports:

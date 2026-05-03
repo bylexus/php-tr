@@ -15,13 +15,15 @@ class SendMailStep extends Step {
 
     public function execute(Task $task): StepResult {
         try {
+            $this->getLogger()->debug("Sending an email ...");
             $payload = $task->getPayload(static::class);
             $this->mailer->From = $payload->from ?? 'nobody@nobody.com';
             $this->mailer->addAddress($payload->to ?? '');
             $this->mailer->Subject = $payload->subject ?? '';
             $this->mailer->Body = $payload->body ?? '-';
             $this->mailer->send();
-            sleep(rand(2, 8));
+            sleep(rand(0, 4));
+            $this->getLogger()->debug("Sending an email - DONE!");
             return new StepResult(StepStatus::SUCCEEDED);
         } catch (Throwable $t) {
             return StepResult::failed(new ErrorInfo($t->getCode(), $t->getMessage()));

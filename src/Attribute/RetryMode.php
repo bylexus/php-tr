@@ -6,6 +6,15 @@ namespace ByLexus\DurableTask\Attribute;
 
 use ByLexus\DurableTask\Enum\RetryMode as RetryModeEnum;
 
+/**
+ * Declares retry behavior.
+ *
+ * Defines the retry strategy for a task or step through a PHP attribute.
+ *
+ * This file is part of bylexus/durable-task
+ *
+ * (c) Alexander Schenkel <info@alexi.ch>
+ */
 #[\Attribute(\Attribute::TARGET_CLASS)]
 final class RetryMode
 {

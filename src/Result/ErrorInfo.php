@@ -4,6 +4,15 @@ declare(strict_types=1);
 
 namespace ByLexus\DurableTask\Result;
 
+/**
+ * Represents workflow error details.
+ *
+ * Stores exception-related information and structured metadata for failed task or step executions.
+ *
+ * This file is part of bylexus/durable-task
+ *
+ * (c) Alexander Schenkel <info@alexi.ch>
+ */
 final class ErrorInfo {
     private int $code;
     private string $message;

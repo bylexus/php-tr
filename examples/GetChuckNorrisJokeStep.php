@@ -9,10 +9,12 @@ use ByLexus\DurableTask\Task;
 class GetChuckNorrisJokeStep extends Step {
     public function execute(Task $task): StepResult {
         try {
+            $this->getLogger()->debug("Fetching that chuck joke.....");
             $json = file_get_contents('https://api.chucknorris.io/jokes/random');
             $joke = json_decode($json);
             $task->getPayload(static::class)->joke = $joke->value ?? '(oops)';
-            sleep(rand(2, 8));
+            sleep(rand(0, 4));
+            $this->getLogger()->debug("Fetched that chuck joke!");
             if (!empty($joke)) {
                 return new StepResult(StepStatus::SUCCEEDED);
             }

@@ -4,6 +4,15 @@ declare(strict_types=1);
 
 namespace ByLexus\DurableTask\Queue;
 
+/**
+ * Represents a persisted queue record.
+ *
+ * Carries the database-backed state for a task and its currently active step.
+ *
+ * This file is part of bylexus/durable-task
+ *
+ * (c) Alexander Schenkel <info@alexi.ch>
+ */
 final class QueueRecord {
     public function __construct(
         public readonly ?int $taskId,

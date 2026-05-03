@@ -8,6 +8,15 @@ use Psr\Log\AbstractLogger;
 use Psr\Log\LoggerInterface;
 use Stringable;
 
+/**
+ * Adds context to log messages.
+ *
+ * Decorates a PSR-3 logger and merges runtime context into each emitted log entry.
+ *
+ * This file is part of bylexus/durable-task
+ *
+ * (c) Alexander Schenkel <info@alexi.ch>
+ */
 final class ContextualLogger extends AbstractLogger
 {
     /** @var \Closure(): array<string, mixed> */

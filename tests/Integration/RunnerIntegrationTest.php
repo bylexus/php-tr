@@ -17,6 +17,7 @@ use ByLexus\DurableTask\Tests\Fixture\ConstructorInjectedServiceFixture;
 use ByLexus\DurableTask\Tests\Fixture\ConstructorInjectedTaskFixture;
 use ByLexus\DurableTask\Tests\Fixture\PayloadHandoffTaskFixture;
 use ByLexus\DurableTask\Tests\Fixture\PayloadMutationTaskFixture;
+use ByLexus\DurableTask\Tests\Fixture\RetainedQueueWorkflowTaskFixture;
 use ByLexus\DurableTask\Tests\Fixture\RunnerExceptionTaskFixture;
 use ByLexus\DurableTask\Tests\Fixture\RunnerRetryTaskFixture;
 use ByLexus\DurableTask\Tests\Fixture\RunnerTimeoutTaskFixture;
@@ -198,7 +199,7 @@ final class RunnerIntegrationTest extends TestCase
                 new RunnerConfiguration('runner-payload-keep'),
             );
 
-            self::assertSame(1, $runner->runSingle());
+            self::assertSame(2, $runner->runSingle());
 
             $row = $this->fetchTaskRow($pdo, $tableName, (int) $record->taskId);
 
@@ -315,7 +316,7 @@ final class RunnerIntegrationTest extends TestCase
                 new RunnerConfiguration('runner-retry-1'),
             );
 
-            self::assertSame(1, $runner->runSingle());
+            self::assertSame(2, $runner->runSingle());
 
             $completedRow = $this->fetchTaskRow($pdo, $tableName, (int) $record->taskId);
 
@@ -572,7 +573,7 @@ final class RunnerIntegrationTest extends TestCase
             $schemaManager = new SchemaManager($pdo, $configuration);
             $schemaManager->bootstrap();
 
-            $task = new QueueWorkflowTaskFixture();
+            $task = new RetainedQueueWorkflowTaskFixture();
             $task->setPayload(['job' => 'loop']);
             $record = $task->enqueue($pdo, $configuration);
 
@@ -597,6 +598,8 @@ final class RunnerIntegrationTest extends TestCase
                 proc_terminate($process, SIGTERM);
                 $this->waitForFile($markerPath, 30);
             } finally {
+                $this->terminateProcess($process);
+
                 foreach ($pipes as $pipe) {
                     fclose($pipe);
                 }
@@ -639,7 +642,7 @@ final class RunnerIntegrationTest extends TestCase
                 $this->waitForFile($readyPath, 30);
                 usleep(500_000);
 
-                $task = new QueueWorkflowTaskFixture();
+                $task = new RetainedQueueWorkflowTaskFixture();
                 $task->setPayload(['job' => 'plain-pdo-notify']);
                 $record = $task->enqueue($pdo, $configuration);
 
@@ -649,6 +652,8 @@ final class RunnerIntegrationTest extends TestCase
                 proc_terminate($process, SIGTERM);
                 $this->waitForFile($markerPath, 30);
             } finally {
+                $this->terminateProcess($process);
+
                 foreach ($pipes as $pipe) {
                     fclose($pipe);
                 }
@@ -683,7 +688,7 @@ final class RunnerIntegrationTest extends TestCase
                 new RunnerConfiguration('runner-retry-exhausted'),
             );
 
-            self::assertSame(1, $runner->runSingle());
+            self::assertSame(2, $runner->runSingle());
 
             $row = $this->fetchTaskRow($pdo, $tableName, (int) $record->taskId);
 
@@ -836,6 +841,33 @@ final class RunnerIntegrationTest extends TestCase
         }
 
         self::fail(sprintf('Expected marker file was not created: %s', $path));
+    }
+
+    /**
+     * @param resource $process
+     */
+    private function terminateProcess($process): void {
+        $status = proc_get_status($process);
+
+        if (!is_array($status) || !($status['running'] ?? false)) {
+            return;
+        }
+
+        proc_terminate($process, SIGTERM);
+
+        for ($attempt = 0; $attempt < 10; $attempt++) {
+            $status = proc_get_status($process);
+
+            if (!is_array($status) || !($status['running'] ?? false)) {
+                return;
+            }
+
+            usleep(100_000);
+        }
+
+        if (defined('SIGKILL')) {
+            proc_terminate($process, SIGKILL);
+        }
     }
 
     /**

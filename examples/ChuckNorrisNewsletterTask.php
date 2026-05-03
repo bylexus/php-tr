@@ -9,7 +9,7 @@ use Psr\Log\LoggerInterface;
 require_once(__DIR__ . '/GetChuckNorrisJokeStep.php');
 require_once(__DIR__ . '/SendMailStep.php');
 
-#[CleanupAfter(new DateInterval('PT1H'))]
+#[CleanupAfter(successful: new DateInterval('PT0H'), unsuccessful: new DateInterval('PT1H'))]
 class ChuckNorrisNewsletterTask extends Task {
     public function __construct(protected PHPMailer $mailer, ?LoggerInterface $logger = null) {
         parent::__construct(logger: $logger);

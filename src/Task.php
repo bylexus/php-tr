@@ -16,6 +16,15 @@ use ByLexus\DurableTask\Runtime\ContextualLogger;
 use Psr\Container\ContainerInterface;
 use Psr\Log\LoggerInterface;
 
+/**
+ * Base class for durable tasks.
+ *
+ * Provides the shared workflow state, payload handling, and enqueue or restore logic for user-defined tasks.
+ *
+ * This file is part of bylexus/durable-task
+ *
+ * (c) Alexander Schenkel <info@alexi.ch>
+ */
 abstract class Task {
     private mixed $payload = null;
     private ?LoggerInterface $baseLogger = null;

@@ -14,6 +14,15 @@ use ByLexus\DurableTask\Task;
 use Psr\Log\LoggerInterface;
 use Psr\Log\NullLogger;
 
+/**
+ * Persists workflow records in PostgreSQL.
+ *
+ * Implements queue storage operations for durable tasks, including inserts, updates, and record retrieval.
+ *
+ * This file is part of bylexus/durable-task
+ *
+ * (c) Alexander Schenkel <info@alexi.ch>
+ */
 final class PostgresQueue {
     /** @var list<string> */
     private const UPDATABLE_COLUMNS = [

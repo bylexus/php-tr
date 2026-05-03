@@ -6,6 +6,15 @@ namespace ByLexus\DurableTask;
 
 use ByLexus\DurableTask\Exception\ConfigurationException;
 
+/**
+ * Normalizes task payload values.
+ *
+ * Converts arrays and objects into consistent stdClass payload structures that can be serialized reliably.
+ *
+ * This file is part of bylexus/durable-task
+ *
+ * (c) Alexander Schenkel <info@alexi.ch>
+ */
 final class PayloadNormalizer {
     public static function normalizeRoot(mixed $payload): \stdClass {
         if ($payload === null) {

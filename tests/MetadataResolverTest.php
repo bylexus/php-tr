@@ -26,7 +26,8 @@ final class MetadataResolverTest extends TestCase
         self::assertSame(RetryMode::FAIL, $metadata->getRetryMode());
         self::assertSame(3, $metadata->getRetries());
         self::assertSame(3600, $this->toSeconds($metadata->getMaxRuntime()));
-        self::assertSame(604800, $this->toSeconds($metadata->getCleanupAfter()));
+        self::assertSame(0, $this->toSeconds($metadata->getSuccessfulCleanupAfter()));
+        self::assertSame(604800, $this->toSeconds($metadata->getUnsuccessfulCleanupAfter()));
     }
 
     public function testConfiguredTaskMetadataIsResolvedFromAttributes(): void {
@@ -36,7 +37,8 @@ final class MetadataResolverTest extends TestCase
         self::assertSame(RetryMode::RESTART, $metadata->getRetryMode());
         self::assertSame(5, $metadata->getRetries());
         self::assertSame(7200, $this->toSeconds($metadata->getMaxRuntime()));
-        self::assertSame(172800, $this->toSeconds($metadata->getCleanupAfter()));
+        self::assertSame(1800, $this->toSeconds($metadata->getSuccessfulCleanupAfter()));
+        self::assertSame(172800, $this->toSeconds($metadata->getUnsuccessfulCleanupAfter()));
     }
 
     public function testStepMetadataUsesTaskDefaultsWhenStepAttributesAreMissing(): void {
@@ -67,12 +69,12 @@ final class MetadataResolverTest extends TestCase
         $resolver->resolveTaskMetadata(NegativeRetriesTaskFixture::class);
     }
 
-    public function testZeroCleanupIntervalIsRejected(): void {
+    public function testZeroCleanupIntervalIsAllowed(): void {
         $resolver = new MetadataResolver();
+        $metadata = $resolver->resolveTaskMetadata(ZeroCleanupTaskFixture::class);
 
-        $this->expectException(ConfigurationException::class);
-
-        $resolver->resolveTaskMetadata(ZeroCleanupTaskFixture::class);
+        self::assertSame(0, $this->toSeconds($metadata->getSuccessfulCleanupAfter()));
+        self::assertSame(86400, $this->toSeconds($metadata->getUnsuccessfulCleanupAfter()));
     }
 
     public function testZeroMaxRuntimeIsRejected(): void {

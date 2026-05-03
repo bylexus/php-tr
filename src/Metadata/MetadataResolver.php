@@ -11,6 +11,15 @@ use ByLexus\DurableTask\Attribute\RetryMode as RetryModeAttribute;
 use ByLexus\DurableTask\Enum\RetryMode;
 use ByLexus\DurableTask\Exception\ConfigurationException;
 
+/**
+ * Resolves task and step metadata.
+ *
+ * Uses reflection to read attributes and cache retry, runtime, and cleanup metadata for workflow classes.
+ *
+ * This file is part of bylexus/durable-task
+ *
+ * (c) Alexander Schenkel <info@alexi.ch>
+ */
 final class MetadataResolver {
     /** @var array<class-string, TaskMetadata> */
     private array $taskCache = [];
@@ -29,14 +38,20 @@ final class MetadataResolver {
         $defaultRetryMode = new RetryModeAttribute(RetryModeAttribute::DEFAULT_MODE);
         $defaultRetries = new Retries(Retries::DEFAULT_COUNT);
         $defaultMaxRuntime = new MaxRuntime(new \DateInterval(MaxRuntime::DEFAULT_SPEC));
-        $defaultCleanupAfter = new CleanupAfter(new \DateInterval(CleanupAfter::DEFAULT_SPEC));
+        $defaultCleanupAfter = CleanupAfter::createDefault();
 
         $retryMode = $this->readRetryMode($reflection) ?? $defaultRetryMode->mode;
         $retries = $this->readRetries($reflection) ?? $defaultRetries->count;
         $maxRuntime = $this->readMaxRuntime($reflection) ?? clone $defaultMaxRuntime->interval;
-        $cleanupAfter = $this->readCleanupAfter($reflection) ?? clone $defaultCleanupAfter->interval;
+        $cleanupAfter = $this->readCleanupAfter($reflection) ?? $defaultCleanupAfter;
 
-        $metadata = new TaskMetadata($retryMode, $retries, $maxRuntime, $cleanupAfter);
+        $metadata = new TaskMetadata(
+            $retryMode,
+            $retries,
+            $maxRuntime,
+            $cleanupAfter->successful,
+            $cleanupAfter->unsuccessful,
+        );
         $this->taskCache[$taskClass] = $metadata;
 
         return $metadata;
@@ -137,7 +152,7 @@ final class MetadataResolver {
         return clone $attribute->interval;
     }
 
-    private function readCleanupAfter(\ReflectionClass $reflection): ?\DateInterval {
+    private function readCleanupAfter(\ReflectionClass $reflection): ?CleanupAfter {
         $attributes = $reflection->getAttributes(CleanupAfter::class);
 
         if ($attributes === []) {
@@ -147,25 +162,31 @@ final class MetadataResolver {
         /** @var CleanupAfter $attribute */
         $attribute = $attributes[0]->newInstance();
 
-        $this->assertPositiveInterval(
-            $attribute->interval,
-            sprintf('CleanupAfter must be greater than zero on class %s', $reflection->getName()),
+        $this->assertNonNegativeInterval(
+            $attribute->successful,
+            sprintf('CleanupAfter successful interval must not be negative on class %s', $reflection->getName()),
         );
 
-        return clone $attribute->interval;
+        $this->assertNonNegativeInterval(
+            $attribute->unsuccessful,
+            sprintf('CleanupAfter unsuccessful interval must not be negative on class %s', $reflection->getName()),
+        );
+
+        return new CleanupAfter(clone $attribute->successful, clone $attribute->unsuccessful);
     }
 
     private function createDefaultTaskMetadata(): TaskMetadata {
         $defaultRetryMode = new RetryModeAttribute(RetryModeAttribute::DEFAULT_MODE);
         $defaultRetries = new Retries(Retries::DEFAULT_COUNT);
         $defaultMaxRuntime = new MaxRuntime(new \DateInterval(MaxRuntime::DEFAULT_SPEC));
-        $defaultCleanupAfter = new CleanupAfter(new \DateInterval(CleanupAfter::DEFAULT_SPEC));
+        $defaultCleanupAfter = CleanupAfter::createDefault();
 
         return new TaskMetadata(
             $defaultRetryMode->mode,
             $defaultRetries->count,
             $defaultMaxRuntime->interval,
-            $defaultCleanupAfter->interval,
+            $defaultCleanupAfter->successful,
+            $defaultCleanupAfter->unsuccessful,
         );
     }
 
@@ -174,6 +195,15 @@ final class MetadataResolver {
         $target = $origin->add($interval);
 
         if ($target <= $origin) {
+            throw new ConfigurationException($message);
+        }
+    }
+
+    private function assertNonNegativeInterval(\DateInterval $interval, string $message): void {
+        $origin = new \DateTimeImmutable('2000-01-01T00:00:00+00:00');
+        $target = $origin->add($interval);
+
+        if ($target < $origin) {
             throw new ConfigurationException($message);
         }
     }

@@ -9,6 +9,15 @@ use Psr\Container\ContainerInterface;
 use Psr\Log\LoggerInterface;
 use Psr\Log\NullLogger;
 
+/**
+ * Instantiates task and step classes.
+ *
+ * Uses reflection and the service container to build workflow classes and resolve logger injection.
+ *
+ * This file is part of bylexus/durable-task
+ *
+ * (c) Alexander Schenkel <info@alexi.ch>
+ */
 final class ClassInstantiator {
     public static function instantiate(
         string $className,

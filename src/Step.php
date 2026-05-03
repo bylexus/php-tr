@@ -13,6 +13,15 @@ use ByLexus\DurableTask\Runtime\ContextualLogger;
 use Psr\Container\ContainerInterface;
 use Psr\Log\LoggerInterface;
 
+/**
+ * Base class for workflow steps.
+ *
+ * Provides step state management, retry coordination, and payload handoff for durable task workflows.
+ *
+ * This file is part of bylexus/durable-task
+ *
+ * (c) Alexander Schenkel <info@alexi.ch>
+ */
 abstract class Step {
     private ?int $taskId = null;
     private ?StepStatus $status = null;

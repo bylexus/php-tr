@@ -6,6 +6,15 @@ namespace ByLexus\DurableTask\Metadata;
 
 use ByLexus\DurableTask\Enum\RetryMode;
 
+/**
+ * Stores step execution metadata.
+ *
+ * Represents resolved retry mode, retry count, and maximum runtime settings for a step class.
+ *
+ * This file is part of bylexus/durable-task
+ *
+ * (c) Alexander Schenkel <info@alexi.ch>
+ */
 final class StepMetadata
 {
     private RetryMode $retryMode;

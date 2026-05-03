@@ -7,6 +7,15 @@ namespace ByLexus\DurableTask;
 use Psr\Container\ContainerInterface;
 use Psr\Log\LoggerInterface;
 
+/**
+ * Configures runner behavior.
+ *
+ * Defines runner identifiers, schema bootstrapping, runtime limits, and optional dependency injection services.
+ *
+ * This file is part of bylexus/durable-task
+ *
+ * (c) Alexander Schenkel <info@alexi.ch>
+ */
 final class RunnerConfiguration
 {
     private bool $bootstrapSchemaOnStart;

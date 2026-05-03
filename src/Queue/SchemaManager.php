@@ -6,6 +6,15 @@ namespace ByLexus\DurableTask\Queue;
 
 use ByLexus\DurableTask\Exception\ConfigurationException;
 
+/**
+ * Manages the queue schema.
+ *
+ * Creates and validates the PostgreSQL schema required by the durable task queue.
+ *
+ * This file is part of bylexus/durable-task
+ *
+ * (c) Alexander Schenkel <info@alexi.ch>
+ */
 final class SchemaManager
 {
     /** @var list<string> */

@@ -18,21 +18,26 @@ $user = getenv('DURABLE_TASK_DB_USER') ?: 'postgres';
 $password = getenv('DURABLE_TASK_DB_PASS') ?: 'postgres';
 
 final class PrintGreetingStep extends Step {
+    // Implement the execute function to execute the work:
     public function execute(Task $task): StepResult {
         // Steps read input from the durable task payload.
         // It is advisable to use a namespaced payload, as all steps of a task share
         // the same Payload object. Here, we use the class name as namespace:
-        $name = (string) ($task->getPayload(static::class)->name ?? 'world');
-
-        // A step can also write payload data for later inspection or later workflow steps.
-        $task->getPayload(static::class)->printedAt = (new DateTimeImmutable('now', new DateTimeZone('UTC')))
-            ->format(DATE_ATOM);
+        $name = $this->name($task);
 
         // Do the work!
         fwrite(STDOUT, sprintf("Hello %s from a durable step.\n", $name));
 
         // and return a result:
         return StepResult::succeeded(message: 'Greeting printed.');
+    }
+
+    // Helper functions to get/set values from the Task's payload:
+    public static function setName(Task $task, string $name) {
+        $task->getPayload(static::class)->name = $name;
+    }
+    public static function name(Task $task): string {
+        return $task->getPayload(static::class)->name ?? 'world';
     }
 }
 
@@ -43,8 +48,8 @@ final class GreetingTask extends Task {
         $this->getPayload()->globalValue = 'some global value';
 
         // You need to know the exact payload path for providing data for later steps:
-        // Here, we use the namespaced 'name' value that is read in the PrintGreeting Step:
-        $this->getPayload(PrintGreetingStep::class)->name = $name;
+        // Here, we use the static function defined in the step PrintGreeting:
+        PrintGreetingStep::setName($this, $name);
 
         return $this;
     }

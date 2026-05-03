@@ -19,6 +19,15 @@ use ByLexus\DurableTask\Runtime\SignalHandler;
 use Psr\Log\LoggerInterface;
 use Psr\Log\NullLogger;
 
+/**
+ * Executes durable task workflows.
+ *
+ * Coordinates queue access, step processing, and task lifecycle transitions for the durable task runner.
+ *
+ * This file is part of bylexus/durable-task
+ *
+ * (c) Alexander Schenkel <info@alexi.ch>
+ */
 class Runner {
     private \PDO $connection;
     private QueueConfiguration $queueConfiguration;
@@ -250,7 +259,7 @@ class Runner {
                 $task,
                 $result,
                 $nextStep,
-                $taskMetadata->getCleanupAfter(),
+                $taskMetadata,
                 $stepMetadata->getRetryMode(),
                 $stepMetadata->getRetries(),
             );
@@ -436,7 +445,7 @@ class Runner {
         Task $task,
         StepResult $result,
         ?Step $nextStep,
-        \DateInterval $cleanupAfter,
+        \ByLexus\DurableTask\Metadata\TaskMetadata $taskMetadata,
         \ByLexus\DurableTask\Enum\RetryMode $retryMode,
         int $retries,
     ): array {
@@ -499,7 +508,7 @@ class Runner {
 
         $changes['task_finished_at'] = $now;
         $changes['step_finished_at'] = $now;
-        $changes['cleanup_at'] = $now->add($cleanupAfter);
+        $changes['cleanup_at'] = $now->add($this->resolveCleanupAfterIntervalForStatus($taskMetadata, $result->getStatus()));
 
         if ($result->getStatus() === StepStatus::SUCCEEDED) {
             $this->logger->info('Runner marked task as succeeded.', [
@@ -560,10 +569,21 @@ class Runner {
 
     private function resolveCleanupAfterInterval(QueueRecord $record): \DateInterval {
         try {
-            return $this->metadataResolver->resolveTaskMetadata($record->taskClass)->getCleanupAfter();
+            return $this->metadataResolver->resolveTaskMetadata($record->taskClass)->getUnsuccessfulCleanupAfter();
         } catch (\Throwable) {
-            return new \DateInterval(CleanupAfter::DEFAULT_SPEC);
+            return new \DateInterval(CleanupAfter::DEFAULT_UNSUCCESSFUL_SPEC);
         }
+    }
+
+    private function resolveCleanupAfterIntervalForStatus(
+        \ByLexus\DurableTask\Metadata\TaskMetadata $taskMetadata,
+        StepStatus $status,
+    ): \DateInterval {
+        if ($status === StepStatus::SUCCEEDED) {
+            return $taskMetadata->getSuccessfulCleanupAfter();
+        }
+
+        return $taskMetadata->getUnsuccessfulCleanupAfter();
     }
 
     private function hasExceededMaxRuntime(QueueRecord $record, \DateInterval $maxRuntime): bool {

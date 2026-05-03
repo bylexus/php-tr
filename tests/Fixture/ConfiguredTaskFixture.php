@@ -10,7 +10,7 @@ use ByLexus\DurableTask\Attribute\Retries;
 use ByLexus\DurableTask\Attribute\RetryMode as RetryModeAttribute;
 use ByLexus\DurableTask\Enum\RetryMode;
 
-#[CleanupAfter(new \DateInterval('P2D'))]
+#[CleanupAfter(new \DateInterval('PT30M'), new \DateInterval('P2D'))]
 #[RetryModeAttribute(RetryMode::RESTART)]
 #[Retries(5)]
 #[MaxRuntime(new \DateInterval('PT2H'))]

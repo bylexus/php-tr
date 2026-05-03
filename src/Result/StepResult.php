@@ -7,6 +7,15 @@ namespace ByLexus\DurableTask\Result;
 use ByLexus\DurableTask\Enum\StepStatus;
 use ByLexus\DurableTask\Exception\ConfigurationException;
 
+/**
+ * Represents a step execution result.
+ *
+ * Carries the outcome, message, metadata, and optional error information produced by a workflow step.
+ *
+ * This file is part of bylexus/durable-task
+ *
+ * (c) Alexander Schenkel <info@alexi.ch>
+ */
 final class StepResult {
     private StepStatus $status;
     private ?ErrorInfo $errorInfo;

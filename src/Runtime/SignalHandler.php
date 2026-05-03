@@ -4,6 +4,15 @@ declare(strict_types=1);
 
 namespace ByLexus\DurableTask\Runtime;
 
+/**
+ * Handles runner shutdown signals.
+ *
+ * Listens for process signals and exposes graceful shutdown state for the task runner.
+ *
+ * This file is part of bylexus/durable-task
+ *
+ * (c) Alexander Schenkel <info@alexi.ch>
+ */
 final class SignalHandler
 {
     private bool $stopRequested = false;
