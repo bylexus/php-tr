@@ -66,6 +66,11 @@ class SendMailStep extends Step {
         $task->getPayload(static::class)->body = $body;
     }
 
+    public static function setAttachments(Task $task, array $attachments) {
+        $task->getPayload(static::class)->attachments = [];
+        $task->getPayload(static::class)->attachments = $attachments;
+    }
+
     public static function addAttachment(Task $task, FileAttachment $attachment) {
         if (empty($task->getPayload(static::class)->attachments)) {
             $task->getPayload(static::class)->attachments = [];

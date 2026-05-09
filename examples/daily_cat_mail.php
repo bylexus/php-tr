@@ -16,6 +16,13 @@ $sm->bootstrap();
 $container = new ExampleServiceContainer();
 
 $task = new DailyCatTask($container->get(PHPMailer::class));
-$task->setTo('alex@alexi.ch');
+$task->setTo([
+    'alex@alexi.ch',
+    'blex@blexi.ch',
+    'clex@clexi.ch',
+    'dlex@dlexi.ch',
+]);
 $task->setFrom('cat@caas.com');
 $task->enqueue($conn);
+
+print_r($task);
