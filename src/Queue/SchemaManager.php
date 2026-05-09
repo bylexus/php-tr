@@ -23,6 +23,7 @@ final class SchemaManager {
         'step_class',
         'task_status',
         'task_attempt',
+        'priority',
         'task_created_at',
         'task_started_at',
         'task_finished_at',
@@ -69,6 +70,7 @@ final class SchemaManager {
         return array_merge(
             [
                 self::tableStatement($configuration),
+                self::priorityMigrationStatement($configuration),
                 self::blobTableStatement($configuration),
             ],
             self::indexStatementsFor($configuration),
@@ -162,6 +164,7 @@ CREATE TABLE IF NOT EXISTS %s (
     step_class TEXT NULL,
     task_status TEXT NOT NULL,
     task_attempt INTEGER NOT NULL DEFAULT 0,
+    priority INTEGER NOT NULL DEFAULT 3,
     task_created_at TIMESTAMPTZ NOT NULL,
     task_started_at TIMESTAMPTZ NULL,
     task_finished_at TIMESTAMPTZ NULL,
@@ -183,6 +186,13 @@ CREATE TABLE IF NOT EXISTS %s (
     updated_at TIMESTAMPTZ NOT NULL
 )
 SQL,
+            self::quotedTableName($configuration),
+        );
+    }
+
+    private static function priorityMigrationStatement(QueueConfiguration $configuration): string {
+        return sprintf(
+            'ALTER TABLE %s ADD COLUMN IF NOT EXISTS priority INTEGER NOT NULL DEFAULT 3',
             self::quotedTableName($configuration),
         );
     }
@@ -212,7 +222,7 @@ SQL,
 
         return [
             sprintf(
-                'CREATE INDEX IF NOT EXISTS %s ON %s (task_status, available_at)',
+                'CREATE INDEX IF NOT EXISTS %s ON %s (task_status, priority, available_at, task_created_at)',
                 self::quotedIdentifier(self::derivedName($configuration, 'task_status_available_at_idx')),
                 $tableName,
             ),

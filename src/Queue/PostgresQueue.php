@@ -70,13 +70,14 @@ final class PostgresQueue {
         return $this->attachmentBlobStore;
     }
 
-    public function enqueue(Task $task, Step $firstStep): QueueRecord {
+    public function enqueue(Task $task, Step $firstStep, int $priority = Task::PRIO_NORMAL): QueueRecord {
         $now = $this->currentTimestamp();
         $startedTransaction = false;
 
         $this->logger->info('Queue enqueue started.', [
             'taskClass' => $task::class,
             'stepClass' => $firstStep::class,
+            'priority' => $priority,
             'taskStatus' => TaskStatus::QUEUED->value,
             'stepStatus' => StepStatus::QUEUED->value,
         ]);
@@ -95,6 +96,7 @@ INSERT INTO %s (
     step_class,
     task_status,
     task_attempt,
+    priority,
     task_created_at,
     task_started_at,
     task_finished_at,
@@ -120,6 +122,7 @@ VALUES (
     :step_class,
     :task_status,
     :task_attempt,
+    :priority,
     :task_created_at,
     :task_started_at,
     :task_finished_at,
@@ -150,6 +153,7 @@ SQL,
                 'step_class' => $firstStep::class,
                 'task_status' => TaskStatus::QUEUED->value,
                 'task_attempt' => 0,
+                'priority' => $priority,
                 'task_created_at' => $this->formatDateTime($now),
                 'task_started_at' => null,
                 'task_finished_at' => null,
@@ -184,6 +188,7 @@ SQL,
             $this->logger->error('Queue enqueue failed.', [
                 'taskClass' => $task::class,
                 'stepClass' => $firstStep::class,
+                'priority' => $priority,
                 'exceptionClass' => $throwable::class,
                 'errorCode' => (int) $throwable->getCode(),
             ]);
@@ -195,6 +200,7 @@ SQL,
             'taskId' => $record->taskId,
             'taskClass' => $record->taskClass,
             'stepClass' => $record->stepClass,
+            'priority' => $record->priority,
             'taskStatus' => $record->taskStatus,
             'stepStatus' => $record->stepStatus,
             'availableAt' => $record->availableAt->format(DATE_ATOM),
@@ -223,7 +229,7 @@ FROM %s
 WHERE task_status = :task_status
   AND step_status = :step_status
   AND available_at <= CURRENT_TIMESTAMP
-ORDER BY available_at, task_created_at
+ORDER BY priority ASC, available_at ASC, task_created_at ASC
 FOR UPDATE SKIP LOCKED
 LIMIT 1
 SQL,
@@ -287,6 +293,7 @@ SQL,
                 'taskId' => $claimedRecord->taskId,
                 'taskClass' => $claimedRecord->taskClass,
                 'stepClass' => $claimedRecord->stepClass,
+                'priority' => $claimedRecord->priority,
                 'taskStatus' => $claimedRecord->taskStatus,
                 'stepStatus' => $claimedRecord->stepStatus,
                 'claimedAt' => $claimedRecord->claimedAt?->format(DATE_ATOM),

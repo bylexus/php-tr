@@ -38,6 +38,7 @@ final class PostgresQueueIntegrationTest extends TestCase
             $record = $task->enqueue($pdo, $configuration);
 
             self::assertNotNull($record->taskId);
+            self::assertSame(Task::PRIO_NORMAL, $record->priority);
             self::assertSame(TaskStatus::QUEUED->value, $record->taskStatus);
             self::assertSame(StepStatus::QUEUED->value, $record->stepStatus);
             self::assertEquals((object) ['job' => 'alpha'], $record->payload);
@@ -81,6 +82,39 @@ final class PostgresQueueIntegrationTest extends TestCase
 
             self::assertInstanceOf(QueueWorkflowTaskFixture::class, $task);
             self::assertEquals((object) ['job' => 'beta'], $task->getPayload());
+        } finally {
+            PostgresIntegrationConnection::dropTableIfExists($pdo, $tableName);
+        }
+    }
+
+    public function testClaimPrefersHigherPriorityTasks(): void {
+        $pdo = PostgresIntegrationConnection::requirePdo($this);
+        $tableName = PostgresIntegrationConnection::uniqueTableName();
+
+        try {
+            $configuration = new QueueConfiguration($tableName);
+            $schemaManager = new SchemaManager($pdo, $configuration);
+            $schemaManager->bootstrap();
+
+            $lowPriorityTask = new QueueWorkflowTaskFixture();
+            $lowPriorityTask->setPayload(['job' => 'low']);
+            $lowPriorityTask->enqueue($pdo, $configuration, null, Task::PRIO_VERY_LOW);
+
+            $highPriorityTask = new QueueWorkflowTaskFixture();
+            $highPriorityTask->setPayload(['job' => 'high']);
+            $highPriorityTask->enqueue($pdo, $configuration, null, Task::PRIO_VERY_HIGH);
+
+            $queue = new PostgresQueue($pdo, $configuration);
+
+            $firstClaim = $queue->claim('runner-1');
+            $secondClaim = $queue->claim('runner-1');
+
+            self::assertNotNull($firstClaim);
+            self::assertNotNull($secondClaim);
+            self::assertSame(Task::PRIO_VERY_HIGH, $firstClaim->priority);
+            self::assertSame(Task::PRIO_VERY_LOW, $secondClaim->priority);
+            self::assertEquals((object) ['job' => 'high'], $firstClaim->payload);
+            self::assertEquals((object) ['job' => 'low'], $secondClaim->payload);
         } finally {
             PostgresIntegrationConnection::dropTableIfExists($pdo, $tableName);
         }

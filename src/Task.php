@@ -27,6 +27,12 @@ use Psr\Log\LoggerInterface;
  * (c) Alexander Schenkel <info@alexi.ch>
  */
 abstract class Task {
+    public const PRIO_VERY_HIGH = 1;
+    public const PRIO_HIGH = 2;
+    public const PRIO_NORMAL = 3;
+    public const PRIO_LOW = 4;
+    public const PRIO_VERY_LOW = 5;
+
     private mixed $payload = null;
     private ?LoggerInterface $baseLogger = null;
     private ?LoggerInterface $logger = null;
@@ -34,6 +40,7 @@ abstract class Task {
     private ?int $id = null;
     private ?TaskStatus $status = null;
     private int $taskAttempt = 0;
+    private int $priority = self::PRIO_NORMAL;
     private ?\DateTimeImmutable $createdAt = null;
     private ?\DateTimeImmutable $startedAt = null;
     private ?\DateTimeImmutable $finishedAt = null;
@@ -62,6 +69,10 @@ abstract class Task {
 
     public function getTaskAttempt(): int {
         return $this->taskAttempt;
+    }
+
+    public function getPriority(): int {
+        return $this->priority;
     }
 
     public function getCreatedAt(): ?\DateTimeImmutable {
@@ -161,7 +172,10 @@ abstract class Task {
         \PDO $connection,
         ?QueueConfiguration $configuration = null,
         ?MetadataResolver $metadataResolver = null,
+        int $priority = self::PRIO_NORMAL,
     ): QueueRecord {
+        self::assertValidPriority($priority);
+
         $firstStep = $this->nextStep(null);
 
         if ($firstStep === null) {
@@ -184,7 +198,7 @@ abstract class Task {
         ]);
 
         $queue = new PostgresQueue($connection, $configuration, $this->baseLogger);
-        $record = $queue->enqueue($this, $firstStep);
+        $record = $queue->enqueue($this, $firstStep, $priority);
 
         $firstStep->hydrateFromQueueRecord($record);
         $this->hydrateFromQueueRecord($record, $firstStep, $queue->getAttachmentBlobStore());
@@ -233,6 +247,7 @@ abstract class Task {
         $this->id = $record->taskId;
         $this->status = TaskStatus::from($record->taskStatus);
         $this->taskAttempt = $record->taskAttempt;
+        $this->priority = $record->priority;
         $this->createdAt = $record->taskCreatedAt;
         $this->startedAt = $record->taskStartedAt;
         $this->finishedAt = $record->taskFinishedAt;
@@ -254,6 +269,17 @@ abstract class Task {
 
     protected function setStoredPayload(mixed $payload, ?AttachmentBlobStore $attachmentBlobStore = null): void {
         $this->payload = PayloadNormalizer::hydrateStoredRoot($payload, $attachmentBlobStore);
+    }
+
+    private static function assertValidPriority(int $priority): void {
+        if ($priority < self::PRIO_VERY_HIGH || $priority > self::PRIO_VERY_LOW) {
+            throw new ConfigurationException(sprintf(
+                'Task priority must be between %d and %d, got %d.',
+                self::PRIO_VERY_HIGH,
+                self::PRIO_VERY_LOW,
+                $priority,
+            ));
+        }
     }
 
     private function materializeRootPayload(): \stdClass {

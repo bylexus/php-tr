@@ -7,7 +7,7 @@ RUN apt-get update \
     && apt-get install --no-install-recommends -y \
         libpq-dev \
     && apt-get autoremove -y && apt-get clean -y \
-    && docker-php-ext-install pgsql pdo_pgsql
+    && docker-php-ext-install pgsql pdo_pgsql pcntl
 
 # install composer
 RUN php -r "copy('https://getcomposer.org/installer', 'composer-setup.php');" && \

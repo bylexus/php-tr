@@ -14,6 +14,8 @@ namespace ByLexus\DurableTask\Queue;
  * (c) Alexander Schenkel <info@alexi.ch>
  */
 final class QueueRecord {
+    public readonly int $priority;
+
     public function __construct(
         public readonly ?int $taskId,
         public readonly string $taskClass,
@@ -39,7 +41,9 @@ final class QueueRecord {
         public readonly bool $cancelRequested,
         public readonly ?string $cancelReason,
         public readonly \DateTimeImmutable $updatedAt,
+        int $priority = 3,
     ) {
+        $this->priority = $priority;
     }
 
     /**
@@ -71,6 +75,7 @@ final class QueueRecord {
             self::toBool($row['cancel_requested'] ?? false),
             isset($row['cancel_reason']) ? (string) $row['cancel_reason'] : null,
             new \DateTimeImmutable((string) $row['updated_at']),
+            isset($row['priority']) ? (int) $row['priority'] : 3,
         );
     }
 

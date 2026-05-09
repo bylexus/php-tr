@@ -69,12 +69,14 @@ final class TaskTest extends TestCase
             false,
             null,
             new \DateTimeImmutable('2026-01-01T00:00:00+00:00'),
+            Task::PRIO_LOW,
         );
 
         $task = Task::fromQueueRecord($record);
 
         self::assertInstanceOf(QueueWorkflowTaskFixture::class, $task);
         self::assertSame(42, $task->getId());
+        self::assertSame(Task::PRIO_LOW, $task->getPriority());
         self::assertInstanceOf(\stdClass::class, $task->getPayload());
         self::assertSame('bar', $task->getPayload()->foo);
         self::assertInstanceOf(QueueWorkflowStepFixture::class, $task->actualStep());
@@ -215,6 +217,15 @@ final class TaskTest extends TestCase
         $this->expectException(ConfigurationException::class);
 
         $task->enqueue($this->createStub(\PDO::class));
+    }
+
+    public function testEnqueueRejectsInvalidPriority(): void {
+        $task = new EmptyWorkflowTaskFixture();
+
+        $this->expectException(ConfigurationException::class);
+        $this->expectExceptionMessage('Task priority must be between 1 and 5, got 0.');
+
+        $task->enqueue($this->createStub(\PDO::class), null, null, 0);
     }
 
     public function testNullPayloadIsExposedAsObjectOnTaskWhenStepIsHydrated(): void {

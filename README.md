@@ -137,7 +137,20 @@ Now you're ready to dispatch the task:
 // The task owns the payload. Here we seed it before enqueueing the first step.
 $task = (new GreetingTask())->withName('Ada Lovelace');
 $task->enqueue($pdo);
+
+// Optional: lower numbers are picked first by runners.
+$task->enqueue($pdo, priority: Task::PRIO_HIGH);
 ```
+
+Tasks default to priority `3` (`Task::PRIO_NORMAL`). You can choose values from `1` to `5` using the built-in constants:
+
+- `Task::PRIO_VERY_HIGH` = `1`
+- `Task::PRIO_HIGH` = `2`
+- `Task::PRIO_NORMAL` = `3`
+- `Task::PRIO_LOW` = `4`
+- `Task::PRIO_VERY_LOW` = `5`
+
+When multiple queued tasks are available, runners claim the highest-priority work first, then fall back to `available_at` and creation time.
 
 ### Start a runner to work on the tasks
 
@@ -211,6 +224,20 @@ Use:
 `runLoop()` listens for PostgreSQL notifications when the PDO driver supports them and otherwise falls back to sleeping for the configured wait timeout.
 
 You can safely start multiple runners, as each task can only be claimed by one runner at a time: This allows for parallel execution of multiple tasks. Useful if your runner gets blocked with long-running tasks.
+
+### Task priority
+
+Each queued task row stores a numeric priority. Priority `1` is the highest priority and `5` is the lowest. If you do not pass a priority when enqueueing, the library stores `3`.
+
+```php
+use ByLexus\DurableTask\Task;
+
+$task = (new WelcomeTask())->withEmail('ada@example.com');
+
+$task->enqueue($pdo, priority: Task::PRIO_VERY_HIGH);
+```
+
+This is useful when some background work should jump ahead of normal queue traffic without needing a separate queue table.
 
 ## Defining Tasks And Steps
 
@@ -309,6 +336,8 @@ use ByLexus\DurableTask\Queue\SchemaManager;
 ```
 
 This is the most predictable option in production. It creates the queue table if not present, and / or updates it.
+
+The queue schema includes a `priority` column with default value `3`, so existing producers can keep enqueueing tasks without passing a priority explicitly.
 
 ### 2. Export the DDL and run it through your own migration system
 
