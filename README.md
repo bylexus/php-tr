@@ -540,7 +540,7 @@ You can configure specific behaviour of your Tasks / Steps by setting PHP Attrib
 | Attribute | Allowed on | Default | Effect |
 | --- | --- | --- | --- |
 | `#[CleanupAfter(...)]` | task | `successful: PT0S`, `unsuccessful: P7D` | How long terminal rows stay in the queue table before cleanup removes them. Successful tasks and unsuccessful tasks are configured separately. |
-| `#[Retries(...)]` | task, step | `3` | Maximum retry count for a failed step. Step-level value overrides the task-level value. |
+| `#[Retries(...)]` | task, step | `count: 3`, `delay: PT1M` | Maximum retry count and minimum delay before retrying a failed step. Step-level value overrides the task-level value. |
 | `#[RetryMode(...)]` | task, step | `fail` | Step-level value overrides the task-level value. In the current implementation, `restart` requeues the same failed step while the other modes end in a terminal failure. |
 | `#[MaxRuntime(...)]` | task, step | `PT1H` | Maximum allowed runtime for one step attempt. The runner fails the step if the claim has exceeded the configured deadline before or after execution. |
 
@@ -558,16 +558,18 @@ use ByLexus\DurableTask\Attribute\RetryMode;
 use ByLexus\DurableTask\Enum\RetryMode as RetryModeEnum;
 
 #[CleanupAfter(new DateInterval('PT6H'), new DateInterval('P7D'))]
+#[Retries(5, new DateInterval('PT2M'))]
+#[RetryMode(RetryModeEnum::RESTART)]
 final class ExportTask extends Task {
-    // task defaults apply to all steps unless a step overrides them
+    // all steps inherit up to 5 retries with a 2 minute backoff unless overridden
 }
 
-#[Retries(5)]
-#[RetryMode(RetryModeEnum::RESTART)]
 #[MaxRuntime(new DateInterval('PT30S'))]
 final class CallRemoteApiStep extends Step {
-    // this step retries independently from other steps
+    // this step uses the task retry policy and only overrides its runtime limit
 }
+
+Use a shorter or longer `DateInterval` when a failing dependency should only be retried after some backoff, for example while waiting for an external service to recover.
 ```
 
 ## Logging
@@ -612,6 +614,7 @@ This example shows:
 - how to pass your application container into `RunnerConfiguration`
 - constructor injection for both tasks and steps
 - step-level retries and max runtime
+- task-level retry defaults, including retry delay
 - using task payload to pass state between steps
 
 ## Operational Notes

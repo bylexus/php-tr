@@ -13,7 +13,7 @@ use ByLexus\DurableTask\Step;
 use ByLexus\DurableTask\Task;
 
 #[RetryModeAttribute(RetryMode::RESTART)]
-#[Retries(1)]
+#[Retries(1, new \DateInterval('PT0S'))]
 final class RunnerRetryStepFixture extends Step
 {
     public function execute(Task $task): StepResult {

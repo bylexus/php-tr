@@ -280,6 +280,7 @@ class Runner {
             $nextStep = null;
             $retryMode = $stepMetadata->getRetryMode();
             $retries = $stepMetadata->getRetries();
+            $retryDelay = $stepMetadata->getRetryDelay();
 
             try {
                 $nextStep = $task->nextStep($step);
@@ -288,6 +289,7 @@ class Runner {
                 $task->updateStep($step, $result);
                 $retryMode = RetryMode::FAIL;
                 $retries = 0;
+                $retryDelay = new \DateInterval('PT0S');
             }
 
             if ($nextStep !== null) {
@@ -308,6 +310,7 @@ class Runner {
                 $taskMetadata,
                 $retryMode,
                 $retries,
+                $retryDelay,
             );
             $this->logger->info('Runner persisting task result.', [
                 'runnerId' => $this->runnerConfiguration->getRunnerId(),
@@ -515,6 +518,7 @@ class Runner {
         \ByLexus\DurableTask\Metadata\TaskMetadata $taskMetadata,
         \ByLexus\DurableTask\Enum\RetryMode $retryMode,
         int $retries,
+        \DateInterval $retryDelay,
     ): array {
         $now = new \DateTimeImmutable('now', new \DateTimeZone('UTC'));
         $changes = [
@@ -549,7 +553,7 @@ class Runner {
             $changes['step_attempt'] = $record->stepAttempt + 1;
             $changes['step_started_at'] = null;
             $changes['step_finished_at'] = null;
-            $changes['available_at'] = $now;
+            $changes['available_at'] = $now->add($retryDelay);
 
             return $changes;
         }

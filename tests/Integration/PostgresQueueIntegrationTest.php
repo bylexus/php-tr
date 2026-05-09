@@ -35,7 +35,7 @@ final class PostgresQueueIntegrationTest extends TestCase
 
             $task = new QueueWorkflowTaskFixture();
             $task->setPayload(['job' => 'alpha']);
-            $record = $task->enqueue($pdo, $configuration);
+            $record = $task->enqueue($pdo, configuration: $configuration);
 
             self::assertNotNull($record->taskId);
             self::assertSame(Task::PRIO_NORMAL, $record->priority);
@@ -64,7 +64,7 @@ final class PostgresQueueIntegrationTest extends TestCase
 
             $task = new QueueWorkflowTaskFixture();
             $task->setPayload(['job' => 'beta']);
-            $task->enqueue($pdo, $configuration);
+            $task->enqueue($pdo, configuration: $configuration);
 
             $firstQueue = new PostgresQueue($pdo, $configuration);
             $secondQueue = new PostgresQueue($otherPdo, $configuration);
@@ -103,7 +103,7 @@ final class PostgresQueueIntegrationTest extends TestCase
 
             $task = new QueueWorkflowTaskFixture();
             $task->setPayload(['job' => 'schema-aware']);
-            $record = $task->enqueue($pdo, $configuration);
+            $record = $task->enqueue($pdo, configuration: $configuration);
 
             self::assertNotNull($record->taskId);
             self::assertStringContainsString($schemaName, $queue->getNotificationChannel());
@@ -132,11 +132,11 @@ final class PostgresQueueIntegrationTest extends TestCase
 
             $lowPriorityTask = new QueueWorkflowTaskFixture();
             $lowPriorityTask->setPayload(['job' => 'low']);
-            $lowPriorityTask->enqueue($pdo, Task::PRIO_VERY_LOW, $configuration, null);
+            $lowPriorityTask->enqueue($pdo, priority: Task::PRIO_VERY_LOW, configuration: $configuration);
 
             $highPriorityTask = new QueueWorkflowTaskFixture();
             $highPriorityTask->setPayload(['job' => 'high']);
-            $highPriorityTask->enqueue($pdo, Task::PRIO_VERY_HIGH, $configuration, null);
+            $highPriorityTask->enqueue($pdo, priority: Task::PRIO_VERY_HIGH, configuration: $configuration);
 
             $queue = new PostgresQueue($pdo, $configuration);
 
@@ -164,7 +164,7 @@ final class PostgresQueueIntegrationTest extends TestCase
             $schemaManager->bootstrap();
 
             $task = new QueueWorkflowTaskFixture();
-            $record = $task->enqueue($pdo, $configuration);
+            $record = $task->enqueue($pdo, configuration: $configuration);
 
             self::assertInstanceOf(\stdClass::class, $record->payload);
 
@@ -197,7 +197,7 @@ final class PostgresQueueIntegrationTest extends TestCase
 
             $task = new QueueWorkflowTaskFixture();
             $task->getPayload()->attachment = FileAttachment::fromFile($sourcePath);
-            $record = $task->enqueue($pdo, $configuration);
+            $record = $task->enqueue($pdo, configuration: $configuration);
 
             self::assertNotNull($record->taskId);
 
@@ -245,7 +245,7 @@ final class PostgresQueueIntegrationTest extends TestCase
                 'primary' => FileAttachment::fromFile($primaryPath),
             ];
             $task->getPayload()->files = [FileAttachment::fromFile($secondaryPath)];
-            $record = $task->enqueue($pdo, $configuration);
+            $record = $task->enqueue($pdo, configuration: $configuration);
 
             self::assertNotNull($record->taskId);
 
@@ -291,7 +291,7 @@ final class PostgresQueueIntegrationTest extends TestCase
             $task = new QueueWorkflowTaskFixture();
             $task->getPayload()->details = (object) ['primary' => $sharedAttachment];
             $task->getPayload()->files = [$sharedAttachment];
-            $record = $task->enqueue($pdo, $configuration);
+            $record = $task->enqueue($pdo, configuration: $configuration);
 
             self::assertNotNull($record->taskId);
 
@@ -325,7 +325,7 @@ final class PostgresQueueIntegrationTest extends TestCase
             $queue = new PostgresQueue($pdo, $configuration);
             $task = new QueueWorkflowTaskFixture();
             $task->getPayload()->attachment = FileAttachment::fromFile($sourcePath);
-            $record = $task->enqueue($pdo, $configuration);
+            $record = $task->enqueue($pdo, configuration: $configuration);
 
             self::assertNotNull($record->taskId);
             self::assertSame(1, $this->blobCountForTask($pdo, $configuration, (int) $record->taskId));
@@ -487,7 +487,7 @@ final class PostgresQueueIntegrationTest extends TestCase
         $task = new QueueWorkflowTaskFixture();
         $task->setPayload($payload);
 
-        return $task->enqueue($pdo, $configuration);
+        return $task->enqueue($pdo, configuration: $configuration);
     }
 
     /** @return array<string, mixed> */

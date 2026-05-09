@@ -12,7 +12,7 @@ use ByLexus\DurableTask\Enum\RetryMode;
 
 #[CleanupAfter(new \DateInterval('PT30M'), new \DateInterval('P2D'))]
 #[RetryModeAttribute(RetryMode::RESTART)]
-#[Retries(5)]
+#[Retries(5, new \DateInterval('PT2M'))]
 #[MaxRuntime(new \DateInterval('PT2H'))]
 final class ConfiguredTaskFixture
 {

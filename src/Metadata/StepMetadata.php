@@ -19,15 +19,18 @@ final class StepMetadata
 {
     private RetryMode $retryMode;
     private int $retries;
+    private \DateInterval $retryDelay;
     private \DateInterval $maxRuntime;
 
     public function __construct(
         RetryMode $retryMode,
         int $retries,
+        \DateInterval $retryDelay,
         \DateInterval $maxRuntime,
     ) {
         $this->retryMode = $retryMode;
         $this->retries = $retries;
+        $this->retryDelay = clone $retryDelay;
         $this->maxRuntime = clone $maxRuntime;
     }
 
@@ -37,6 +40,10 @@ final class StepMetadata
 
     public function getRetries(): int {
         return $this->retries;
+    }
+
+    public function getRetryDelay(): \DateInterval {
+        return clone $this->retryDelay;
     }
 
     public function getMaxRuntime(): \DateInterval {

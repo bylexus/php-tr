@@ -25,6 +25,7 @@ final class MetadataResolverTest extends TestCase
 
         self::assertSame(RetryMode::FAIL, $metadata->getRetryMode());
         self::assertSame(3, $metadata->getRetries());
+        self::assertSame(60, $this->toSeconds($metadata->getRetryDelay()));
         self::assertSame(3600, $this->toSeconds($metadata->getMaxRuntime()));
         self::assertSame(0, $this->toSeconds($metadata->getSuccessfulCleanupAfter()));
         self::assertSame(604800, $this->toSeconds($metadata->getUnsuccessfulCleanupAfter()));
@@ -36,6 +37,7 @@ final class MetadataResolverTest extends TestCase
 
         self::assertSame(RetryMode::RESTART, $metadata->getRetryMode());
         self::assertSame(5, $metadata->getRetries());
+        self::assertSame(120, $this->toSeconds($metadata->getRetryDelay()));
         self::assertSame(7200, $this->toSeconds($metadata->getMaxRuntime()));
         self::assertSame(1800, $this->toSeconds($metadata->getSuccessfulCleanupAfter()));
         self::assertSame(172800, $this->toSeconds($metadata->getUnsuccessfulCleanupAfter()));
@@ -48,6 +50,7 @@ final class MetadataResolverTest extends TestCase
 
         self::assertSame(RetryMode::RESTART, $stepMetadata->getRetryMode());
         self::assertSame(5, $stepMetadata->getRetries());
+        self::assertSame(120, $this->toSeconds($stepMetadata->getRetryDelay()));
         self::assertSame(7200, $this->toSeconds($stepMetadata->getMaxRuntime()));
     }
 
@@ -58,6 +61,7 @@ final class MetadataResolverTest extends TestCase
 
         self::assertSame(RetryMode::SKIP, $stepMetadata->getRetryMode());
         self::assertSame(1, $stepMetadata->getRetries());
+        self::assertSame(900, $this->toSeconds($stepMetadata->getRetryDelay()));
         self::assertSame(1800, $this->toSeconds($stepMetadata->getMaxRuntime()));
     }
 

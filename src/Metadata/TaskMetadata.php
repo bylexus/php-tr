@@ -19,6 +19,7 @@ final class TaskMetadata
 {
     private RetryMode $retryMode;
     private int $retries;
+    private \DateInterval $retryDelay;
     private \DateInterval $maxRuntime;
     private \DateInterval $successfulCleanupAfter;
     private \DateInterval $unsuccessfulCleanupAfter;
@@ -26,12 +27,14 @@ final class TaskMetadata
     public function __construct(
         RetryMode $retryMode,
         int $retries,
+        \DateInterval $retryDelay,
         \DateInterval $maxRuntime,
         \DateInterval $successfulCleanupAfter,
         \DateInterval $unsuccessfulCleanupAfter,
     ) {
         $this->retryMode = $retryMode;
         $this->retries = $retries;
+        $this->retryDelay = clone $retryDelay;
         $this->maxRuntime = clone $maxRuntime;
         $this->successfulCleanupAfter = clone $successfulCleanupAfter;
         $this->unsuccessfulCleanupAfter = clone $unsuccessfulCleanupAfter;
@@ -43,6 +46,10 @@ final class TaskMetadata
 
     public function getRetries(): int {
         return $this->retries;
+    }
+
+    public function getRetryDelay(): \DateInterval {
+        return clone $this->retryDelay;
     }
 
     public function getMaxRuntime(): \DateInterval {

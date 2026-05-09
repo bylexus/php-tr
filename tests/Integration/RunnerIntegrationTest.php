@@ -45,7 +45,7 @@ final class RunnerIntegrationTest extends TestCase
             $schemaManager->bootstrap();
 
             $task = new RunnerNextStepExceptionTaskFixture();
-            $record = $task->enqueue($pdo, $configuration);
+            $record = $task->enqueue($pdo, configuration: $configuration);
 
             self::assertNotNull($record->taskId);
 
@@ -86,7 +86,7 @@ final class RunnerIntegrationTest extends TestCase
 
             $task = new AttachmentRoundtripTaskFixture();
             $task->getPayload()->attachment = FileAttachment::fromFile($sourcePath);
-            $record = $task->enqueue($pdo, $configuration);
+            $record = $task->enqueue($pdo, configuration: $configuration);
 
             self::assertNotNull($record->taskId);
 
@@ -120,7 +120,7 @@ final class RunnerIntegrationTest extends TestCase
 
             $task = new QueueWorkflowTaskFixture();
             $task->setPayload(['job' => 'runner']);
-            $record = $task->enqueue($pdo, $configuration);
+            $record = $task->enqueue($pdo, configuration: $configuration);
 
             self::assertNotNull($record->taskId);
 
@@ -162,7 +162,7 @@ final class RunnerIntegrationTest extends TestCase
             $logger = new SpyLogger();
             $task = new QueueWorkflowTaskFixture($logger);
             $task->setPayload(['job' => 'runner-logs']);
-            $record = $task->enqueue($pdo, $configuration);
+            $record = $task->enqueue($pdo, configuration: $configuration);
 
             self::assertNotNull($record->taskId);
 
@@ -233,7 +233,7 @@ final class RunnerIntegrationTest extends TestCase
 
             $task = new RunnerExceptionTaskFixture();
             $task->setPayload(['to' => 'alex@example.com', 'from' => 'chuck@example.com']);
-            $record = $task->enqueue($pdo, $configuration);
+            $record = $task->enqueue($pdo, configuration: $configuration);
 
             self::assertNotNull($record->taskId);
 
@@ -267,7 +267,7 @@ final class RunnerIntegrationTest extends TestCase
 
             $task = new PayloadHandoffTaskFixture();
             $task->setPayload(['to' => 'alex@example.com', 'from' => 'chuck@example.com']);
-            $record = $task->enqueue($pdo, $configuration);
+            $record = $task->enqueue($pdo, configuration: $configuration);
 
             self::assertNotNull($record->taskId);
 
@@ -303,7 +303,7 @@ final class RunnerIntegrationTest extends TestCase
             $schemaManager->bootstrap();
 
             $task = new PayloadMutationTaskFixture();
-            $record = $task->enqueue($pdo, $configuration);
+            $record = $task->enqueue($pdo, configuration: $configuration);
 
             self::assertNotNull($record->taskId);
 
@@ -341,7 +341,7 @@ final class RunnerIntegrationTest extends TestCase
 
             $task = new QueueWorkflowTaskFixture();
             $task->setPayload(['job' => 'cleanup']);
-            $record = $task->enqueue($pdo, $configuration);
+            $record = $task->enqueue($pdo, configuration: $configuration);
 
             self::assertNotNull($record->taskId);
 
@@ -384,7 +384,7 @@ final class RunnerIntegrationTest extends TestCase
 
             $task = new RunnerRetryTaskFixture();
             $task->setPayload(['failuresRemaining' => 1]);
-            $record = $task->enqueue($pdo, $configuration);
+            $record = $task->enqueue($pdo, configuration: $configuration);
 
             self::assertNotNull($record->taskId);
 
@@ -421,7 +421,7 @@ final class RunnerIntegrationTest extends TestCase
 
             $task = new RunnerTimeoutTaskFixture();
             $task->setPayload(['job' => 'timeout']);
-            $record = $task->enqueue($pdo, $configuration);
+            $record = $task->enqueue($pdo, configuration: $configuration);
 
             self::assertNotNull($record->taskId);
 
@@ -463,7 +463,7 @@ final class RunnerIntegrationTest extends TestCase
 
             $service = new ConstructorInjectedServiceFixture('mailer');
             $task = new ConstructorInjectedTaskFixture($service);
-            $record = $task->enqueue($pdo, $configuration);
+            $record = $task->enqueue($pdo, configuration: $configuration);
 
             self::assertNotNull($record->taskId);
 
@@ -509,7 +509,7 @@ final class RunnerIntegrationTest extends TestCase
             $logger = new SpyLogger();
             $service = new ConstructorInjectedServiceFixture('mailer');
             $task = new ServiceAndLoggerInjectedTaskFixture($service, $logger);
-            $record = $task->enqueue($pdo, $configuration);
+            $record = $task->enqueue($pdo, configuration: $configuration);
 
             self::assertNotNull($record->taskId);
 
@@ -562,7 +562,7 @@ final class RunnerIntegrationTest extends TestCase
             $schemaManager->bootstrap();
 
             $task = new ConstructorInjectedTaskFixture(new ConstructorInjectedServiceFixture('mailer'));
-            $record = $task->enqueue($pdo, $configuration);
+            $record = $task->enqueue($pdo, configuration: $configuration);
 
             self::assertNotNull($record->taskId);
 
@@ -608,7 +608,7 @@ final class RunnerIntegrationTest extends TestCase
             $schemaManager->bootstrap();
 
             $task = new StepInjectedOnlyTaskFixture();
-            $record = $task->enqueue($pdo, $configuration);
+            $record = $task->enqueue($pdo, configuration: $configuration);
 
             self::assertNotNull($record->taskId);
 
@@ -653,7 +653,7 @@ final class RunnerIntegrationTest extends TestCase
 
             $task = new RetainedQueueWorkflowTaskFixture();
             $task->setPayload(['job' => 'loop']);
-            $record = $task->enqueue($pdo, $configuration);
+            $record = $task->enqueue($pdo, configuration: $configuration);
 
             self::assertNotNull($record->taskId);
 
@@ -702,7 +702,7 @@ final class RunnerIntegrationTest extends TestCase
             $schemaManager->bootstrap();
 
             $task = new GracefulShutdownTaskFixture();
-            $record = $task->enqueue($pdo, $configuration);
+            $record = $task->enqueue($pdo, configuration: $configuration);
 
             self::assertNotNull($record->taskId);
 
@@ -783,7 +783,7 @@ final class RunnerIntegrationTest extends TestCase
 
                 $task = new RetainedQueueWorkflowTaskFixture();
                 $task->setPayload(['job' => 'plain-pdo-notify']);
-                $record = $task->enqueue($pdo, $configuration);
+                $record = $task->enqueue($pdo, configuration: $configuration);
 
                 self::assertNotNull($record->taskId);
                 $this->waitForTaskStatus($pdo, $tableName, (int) $record->taskId, TaskStatus::SUCCEEDED->value, 20);
@@ -817,7 +817,7 @@ final class RunnerIntegrationTest extends TestCase
 
             $task = new RunnerRetryTaskFixture();
             $task->setPayload(['failuresRemaining' => 2]);
-            $record = $task->enqueue($pdo, $configuration);
+            $record = $task->enqueue($pdo, configuration: $configuration);
 
             self::assertNotNull($record->taskId);
 
@@ -854,7 +854,7 @@ final class RunnerIntegrationTest extends TestCase
 
             $task = new QueueWorkflowTaskFixture();
             $task->setPayload(['job' => 'cancel']);
-            $record = $task->enqueue($pdo, $configuration);
+            $record = $task->enqueue($pdo, configuration: $configuration);
 
             self::assertNotNull($record->taskId);
 

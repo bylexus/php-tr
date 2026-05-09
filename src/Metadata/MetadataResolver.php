@@ -25,7 +25,12 @@ final class MetadataResolver {
     private array $taskCache = [];
 
     /**
-     * @var array<class-string, array{retryMode: ?RetryMode, retries: ?int, maxRuntime: ?\DateInterval}>
+     * @var array<class-string, array{
+     *     retryMode: ?RetryMode,
+     *     retries: ?int,
+     *     retryDelay: ?\DateInterval,
+     *     maxRuntime: ?\DateInterval
+     * }>
      */
     private array $stepAttributeCache = [];
 
@@ -36,18 +41,21 @@ final class MetadataResolver {
 
         $reflection = $this->reflectClass($taskClass);
         $defaultRetryMode = new RetryModeAttribute(RetryModeAttribute::DEFAULT_MODE);
-        $defaultRetries = new Retries(Retries::DEFAULT_COUNT);
+        $defaultRetries = Retries::createDefault();
         $defaultMaxRuntime = new MaxRuntime(new \DateInterval(MaxRuntime::DEFAULT_SPEC));
         $defaultCleanupAfter = CleanupAfter::createDefault();
+        $retrySettings = $this->readRetries($reflection) ?? $defaultRetries;
 
         $retryMode = $this->readRetryMode($reflection) ?? $defaultRetryMode->mode;
-        $retries = $this->readRetries($reflection) ?? $defaultRetries->count;
+        $retries = $retrySettings->count;
+        $retryDelay = clone $retrySettings->delay;
         $maxRuntime = $this->readMaxRuntime($reflection) ?? clone $defaultMaxRuntime->interval;
         $cleanupAfter = $this->readCleanupAfter($reflection) ?? $defaultCleanupAfter;
 
         $metadata = new TaskMetadata(
             $retryMode,
             $retries,
+            $retryDelay,
             $maxRuntime,
             $cleanupAfter->successful,
             $cleanupAfter->unsuccessful,
@@ -65,12 +73,18 @@ final class MetadataResolver {
         return new StepMetadata(
             $attributeValues['retryMode'] ?? $taskMetadata->getRetryMode(),
             $attributeValues['retries'] ?? $taskMetadata->getRetries(),
+            $attributeValues['retryDelay'] ?? $taskMetadata->getRetryDelay(),
             $attributeValues['maxRuntime'] ?? $taskMetadata->getMaxRuntime(),
         );
     }
 
     /**
-     * @return array{retryMode: ?RetryMode, retries: ?int, maxRuntime: ?\DateInterval}
+     * @return array{
+     *     retryMode: ?RetryMode,
+     *     retries: ?int,
+     *     retryDelay: ?\DateInterval,
+     *     maxRuntime: ?\DateInterval
+     * }
      */
     private function resolveStepAttributeValues(string $stepClass): array {
         if (isset($this->stepAttributeCache[$stepClass])) {
@@ -83,9 +97,12 @@ final class MetadataResolver {
             throw new ConfigurationException(sprintf('CleanupAfter is only allowed on task classes: %s', $stepClass));
         }
 
+        $retrySettings = $this->readRetries($reflection);
+
         $attributeValues = [
             'retryMode' => $this->readRetryMode($reflection),
-            'retries' => $this->readRetries($reflection),
+            'retries' => $retrySettings?->count,
+            'retryDelay' => $retrySettings === null ? null : clone $retrySettings->delay,
             'maxRuntime' => $this->readMaxRuntime($reflection),
         ];
 
@@ -115,7 +132,7 @@ final class MetadataResolver {
         return $attribute->mode;
     }
 
-    private function readRetries(\ReflectionClass $reflection): ?int {
+    private function readRetries(\ReflectionClass $reflection): ?Retries {
         $attributes = $reflection->getAttributes(Retries::class);
 
         if ($attributes === []) {
@@ -131,7 +148,12 @@ final class MetadataResolver {
             );
         }
 
-        return $attribute->count;
+        $this->assertNonNegativeInterval(
+            $attribute->delay,
+            sprintf('Retry delay must not be negative on class %s', $reflection->getName()),
+        );
+
+        return $attribute;
     }
 
     private function readMaxRuntime(\ReflectionClass $reflection): ?\DateInterval {
@@ -177,13 +199,14 @@ final class MetadataResolver {
 
     private function createDefaultTaskMetadata(): TaskMetadata {
         $defaultRetryMode = new RetryModeAttribute(RetryModeAttribute::DEFAULT_MODE);
-        $defaultRetries = new Retries(Retries::DEFAULT_COUNT);
+        $defaultRetries = Retries::createDefault();
         $defaultMaxRuntime = new MaxRuntime(new \DateInterval(MaxRuntime::DEFAULT_SPEC));
         $defaultCleanupAfter = CleanupAfter::createDefault();
 
         return new TaskMetadata(
             $defaultRetryMode->mode,
             $defaultRetries->count,
+            $defaultRetries->delay,
             $defaultMaxRuntime->interval,
             $defaultCleanupAfter->successful,
             $defaultCleanupAfter->unsuccessful,
