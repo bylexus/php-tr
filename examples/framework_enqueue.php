@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-use ByLexus\TaskRunner\QueueContext;
+use ByLexus\TaskRunner\TaskEnvironment;
 use Psr\Log\LoggerInterface;
 
 require dirname(__DIR__) . '/vendor/autoload.php';
@@ -17,9 +17,9 @@ $pdo = new PDO($dsn, $user, $password);
 // This container represents the application services available at enqueue time.
 $container = new FrameworkDemoContainer();
 $logger = $container->get(LoggerInterface::class);
-$queue = new QueueContext($pdo, null, $container, $logger);
+$env = new TaskEnvironment($pdo, null, $container, $logger);
 // Producer commands often own schema bootstrap in real applications or deployment jobs.
-$queue->getSchemaManager()->bootstrap();
+$env->getSchemaManager()->bootstrap();
 $userId = (int) ($argv[1] ?? 42);
 
 // Enqueue side can instantiate the task directly, just like any other application service.
@@ -31,7 +31,7 @@ $task = new ImportUserProfileTask(
 );
 
 // Only class names and payload are stored; the worker will reconstruct fresh task and step instances later.
-$record = $queue->enqueue($task->forUserId($userId));
+$record = $env->enqueue($task->forUserId($userId));
 
 fwrite(
     STDOUT,

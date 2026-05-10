@@ -37,7 +37,7 @@ class Runner {
     private const STOP_REQUESTED_FAILURE_CODE = 499;
     private const STOP_REQUESTED_FAILURE_MESSAGE = 'Runner stop was requested before the current step completed.';
 
-    private QueueContext $queueContext;
+    private TaskEnvironment $taskEnvironment;
     private \PDO $connection;
     private QueueConfiguration $queueConfiguration;
     private RunnerConfiguration $runnerConfiguration;
@@ -49,15 +49,15 @@ class Runner {
     private bool $notificationListenerRegistered = false;
     private ?int $lastExpiredQueueCleanupTimestamp = null;
 
-    public function __construct(QueueContext $queueContext) {
-        $this->queueContext = $queueContext;
-        $this->connection = $queueContext->getConnection();
-        $this->queueConfiguration = $queueContext->getQueueConfiguration();
-        $this->runnerConfiguration = $queueContext->getRunnerConfiguration();
-        $this->metadataResolver = $queueContext->getMetadataResolver();
+    public function __construct(TaskEnvironment $taskEnvironment) {
+        $this->taskEnvironment = $taskEnvironment;
+        $this->connection = $taskEnvironment->getConnection();
+        $this->queueConfiguration = $taskEnvironment->getQueueConfiguration();
+        $this->runnerConfiguration = $taskEnvironment->getRunnerConfiguration();
+        $this->metadataResolver = $taskEnvironment->getMetadataResolver();
         $this->logger = $this->runnerConfiguration->getLogger() ?? new NullLogger();
         $this->platform = DatabasePlatformResolver::resolve($this->connection);
-        $this->queue = $queueContext->getDatabaseQueue();
+        $this->queue = $taskEnvironment->getDatabaseQueue();
         $this->signalHandler = new SignalHandler($this->handleStopRequested(...));
 
         $this->logger->debug('Runner initialized.', [
@@ -180,7 +180,7 @@ class Runner {
             'runnerId' => $this->runnerConfiguration->getRunnerId(),
         ]);
 
-        $this->queueContext->getSchemaManager()->bootstrap();
+        $this->taskEnvironment->getSchemaManager()->bootstrap();
     }
 
     private function ensureNotificationListener(): void {

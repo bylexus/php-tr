@@ -199,7 +199,7 @@ abstract class Task {
         $this->materializeRootPayload()->{$propertyOrPayload} = $payload;
     }
 
-    public function enqueue(QueueContext $queueContext, int $priority = self::PRIO_NORMAL): QueueRecord {
+    public function enqueue(TaskEnvironment $taskEnvironment, int $priority = self::PRIO_NORMAL): QueueRecord {
         self::assertValidPriority($priority);
 
         $firstStep = $this->nextStep(null);
@@ -210,7 +210,7 @@ abstract class Task {
             );
         }
 
-        $resolver = $queueContext->getMetadataResolver();
+        $resolver = $taskEnvironment->getMetadataResolver();
         $taskMetadata = $resolver->resolveTaskMetadata(static::class);
         $resolver->resolveStepMetadata($firstStep::class, $taskMetadata);
 
@@ -223,7 +223,7 @@ abstract class Task {
             'stepClass' => $firstStep::class,
         ]);
 
-        $queue = $queueContext->getDatabaseQueue();
+        $queue = $taskEnvironment->getDatabaseQueue();
         $record = $queue->enqueue($this, $firstStep, $priority);
 
         $firstStep->hydrateFromQueueRecord($record);

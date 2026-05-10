@@ -8,7 +8,7 @@ use ByLexus\TaskRunner\Enum\StepStatus;
 use ByLexus\TaskRunner\Enum\TaskStatus;
 use ByLexus\TaskRunner\Queue\DatabaseQueue;
 use ByLexus\TaskRunner\Queue\QueueConfiguration;
-use ByLexus\TaskRunner\QueueContext;
+use ByLexus\TaskRunner\TaskEnvironment;
 use ByLexus\TaskRunner\Tests\Fixture\QueueWorkflowTaskFixture;
 use PHPUnit\Framework\TestCase;
 
@@ -79,13 +79,13 @@ final class DatabaseQueueTest extends TestCase
 
         $pdo = new \PDO('sqlite::memory:');
         $configuration = new QueueConfiguration('task_queue');
-        $queueContext = new QueueContext($pdo, $configuration);
+        $taskEnvironment = new TaskEnvironment($pdo, $configuration);
 
-        $queueContext->getSchemaManager()->bootstrap();
+        $taskEnvironment->getSchemaManager()->bootstrap();
 
         $queue = new DatabaseQueue($pdo, $configuration);
         $task = new QueueWorkflowTaskFixture();
-        $record = $queueContext->enqueue($task);
+        $record = $taskEnvironment->enqueue($task);
 
         self::assertNotNull($record->taskId);
         self::assertTrue($pdo->query('SELECT COUNT(*) FROM "task_queue"') instanceof \PDOStatement);
@@ -99,13 +99,13 @@ final class DatabaseQueueTest extends TestCase
 
         $pdo = new \PDO('sqlite::memory:');
         $configuration = new QueueConfiguration('task_queue');
-        $queueContext = new QueueContext($pdo, $configuration);
+        $taskEnvironment = new TaskEnvironment($pdo, $configuration);
 
-        $queueContext->getSchemaManager()->bootstrap();
+        $taskEnvironment->getSchemaManager()->bootstrap();
 
         $queue = new DatabaseQueue($pdo, $configuration);
         $task = new QueueWorkflowTaskFixture();
-        $record = $queueContext->enqueue($task);
+        $record = $taskEnvironment->enqueue($task);
         $startedAt = new \DateTimeImmutable('now', new \DateTimeZone('UTC'));
 
         $pdo->beginTransaction();

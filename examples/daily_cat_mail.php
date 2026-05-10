@@ -1,7 +1,7 @@
 <?php
 
 use ByLexus\TaskRunner\Queue\QueueConfiguration;
-use ByLexus\TaskRunner\QueueContext;
+use ByLexus\TaskRunner\TaskEnvironment;
 use PHPMailer\PHPMailer\PHPMailer;
 
 require_once(__DIR__ . '/../vendor/autoload.php');
@@ -18,8 +18,8 @@ $conn = new PDO("mysql:host=127.0.0.1;port=3307;dbname=tr_test", 'phptr', 'phptr
 $qc = new QueueConfiguration(schemaName: 'tr_test');
 // $conn = new PDO("sqlite:sqlite-test.db");
 // $qc = new QueueConfiguration();
-$queue = new QueueContext($conn, $qc);
-$queue->getSchemaManager()->bootstrap();
+$env = new TaskEnvironment($conn, $qc);
+$env->getSchemaManager()->bootstrap();
 
 $container = new ExampleServiceContainer();
 
@@ -31,6 +31,6 @@ $task->setTo([
     'dlex@dlexi.ch',
 ]);
 $task->setFrom('cat@caas.com');
-$queue->enqueue($task);
+$env->enqueue($task);
 
 print_r($task);

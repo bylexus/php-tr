@@ -1,7 +1,7 @@
 <?php
 
 use ByLexus\TaskRunner\Queue\QueueConfiguration;
-use ByLexus\TaskRunner\QueueContext;
+use ByLexus\TaskRunner\TaskEnvironment;
 use ByLexus\TaskRunner\RunnerConfiguration;
 use Psr\Log\LoggerInterface;
 
@@ -18,9 +18,9 @@ $qc = new QueueConfiguration(schemaName: 'tr_test');
 $runnerConfig = new RunnerConfiguration(
     bootstrapSchemaOnStart: true,
 );
-$queue = new QueueContext($conn, $qc, $container, $container->get(LoggerInterface::class), $runnerConfig);
+$env = new TaskEnvironment($conn, $qc, $container, $container->get(LoggerInterface::class), $runnerConfig);
 // $conn = new PDO("sqlite:sqlite-test.db");
-$runner = $queue->createRunner();
+$runner = $env->createRunner();
 
 // runLoop() benefits from notifications only on PostgreSQL; the other backends poll.
 $runner->runLoop();

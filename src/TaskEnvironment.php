@@ -23,7 +23,7 @@ use Psr\Log\LoggerInterface;
  *
  * (c) Alexander Schenkel <info@alexi.ch>
  */
-final class QueueContext {
+final class TaskEnvironment {
     private \PDO $connection;
     private QueueConfiguration $queueConfiguration;
     private ?ContainerInterface $container;
@@ -65,7 +65,7 @@ final class QueueContext {
     }
 
     /**
-     * Returns the lazily-created DatabaseQueue bound to this QueueContext.
+     * Returns the lazily-created DatabaseQueue bound to this TaskEnvironment.
      */
     public function getDatabaseQueue(): DatabaseQueue {
         if ($this->databaseQueue === null) {
@@ -76,7 +76,7 @@ final class QueueContext {
     }
 
     /**
-     * Returns the stored runner configuration for QueueContext-based runner creation.
+     * Returns the stored runner configuration for TaskEnvironment-based runner creation.
      */
     public function getRunnerConfiguration(): RunnerConfiguration {
         return $this->runnerConfiguration;
@@ -111,7 +111,7 @@ final class QueueContext {
     }
 
     /**
-     * Returns the lazily-created SchemaManager bound to this QueueContext.
+     * Returns the lazily-created SchemaManager bound to this TaskEnvironment.
      */
     public function getSchemaManager(): SchemaManager {
         if ($this->schemaManager === null) {

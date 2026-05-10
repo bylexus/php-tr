@@ -10,7 +10,7 @@ use ByLexus\TaskRunner\Queue\DatabaseQueue;
 use ByLexus\TaskRunner\Queue\QueueConfiguration;
 use ByLexus\TaskRunner\Queue\QueueRecord;
 use ByLexus\TaskRunner\Queue\SchemaManager;
-use ByLexus\TaskRunner\QueueContext;
+use ByLexus\TaskRunner\TaskEnvironment;
 use ByLexus\TaskRunner\RunnerConfiguration;
 use ByLexus\TaskRunner\Step;
 use ByLexus\TaskRunner\Task;
@@ -22,9 +22,9 @@ use ByLexus\TaskRunner\Tests\Support\InMemoryContainer;
 use ByLexus\TaskRunner\Tests\Support\SpyLogger;
 use PHPUnit\Framework\TestCase;
 
-final class QueueContextTest extends TestCase
+final class TaskEnvironmentTest extends TestCase
 {
-    public function testQueueContextExposesConfiguredConnectionAndQueueConfiguration(): void {
+    public function testTaskEnvironmentExposesConfiguredConnectionAndQueueConfiguration(): void {
         $connection = $this->createStub(\PDO::class);
         $configuration = new QueueConfiguration('custom_queue', 'custom_schema');
         $container = new InMemoryContainer([]);
@@ -32,7 +32,7 @@ final class QueueContextTest extends TestCase
         $runnerConfiguration = new RunnerConfiguration('runner-test');
         $metadataResolver = new MetadataResolver();
 
-        $context = new QueueContext(
+        $context = new TaskEnvironment(
             $connection,
             $configuration,
             $container,
@@ -54,7 +54,7 @@ final class QueueContextTest extends TestCase
         self::assertSame($metadataResolver, $this->readPrivateProperty($context, 'metadataResolver'));
     }
 
-    public function testQueueContextEnqueueDelegatesToTaskWithStoredMetadataResolver(): void {
+    public function testTaskEnvironmentEnqueueDelegatesToTaskWithStoredMetadataResolver(): void {
         $connection = $this->createStub(\PDO::class);
         $configuration = new QueueConfiguration('custom_queue', 'custom_schema');
         $metadataResolver = new MetadataResolver();
@@ -85,7 +85,7 @@ final class QueueContextTest extends TestCase
             Task::PRIO_HIGH,
         );
         $task = new class ($expectedRecord) extends Task {
-            public ?QueueContext $receivedQueueContext = null;
+            public ?TaskEnvironment $receivedTaskEnvironment = null;
             public ?int $receivedPriority = null;
             private QueueRecord $record;
 
@@ -98,15 +98,15 @@ final class QueueContextTest extends TestCase
                 return null;
             }
 
-            public function enqueue(QueueContext $queueContext, int $priority = self::PRIO_NORMAL): QueueRecord {
-                $this->receivedQueueContext = $queueContext;
+            public function enqueue(TaskEnvironment $taskEnvironment, int $priority = self::PRIO_NORMAL): QueueRecord {
+                $this->receivedTaskEnvironment = $taskEnvironment;
                 $this->receivedPriority = $priority;
 
                 return $this->record;
             }
         };
 
-        $context = new QueueContext(
+        $context = new TaskEnvironment(
             $connection,
             $configuration,
             metadataResolver: $metadataResolver,
@@ -114,13 +114,13 @@ final class QueueContextTest extends TestCase
         $record = $context->enqueue($task, Task::PRIO_HIGH);
 
         self::assertSame($expectedRecord, $record);
-        self::assertSame($context, $task->receivedQueueContext);
+        self::assertSame($context, $task->receivedTaskEnvironment);
         self::assertSame(Task::PRIO_HIGH, $task->receivedPriority);
-        self::assertSame($metadataResolver, $task->receivedQueueContext?->getMetadataResolver());
-        self::assertSame($configuration, $task->receivedQueueContext?->getQueueConfiguration());
+        self::assertSame($metadataResolver, $task->receivedTaskEnvironment?->getMetadataResolver());
+        self::assertSame($configuration, $task->receivedTaskEnvironment?->getQueueConfiguration());
     }
 
-    public function testQueueContextCreateRunnerUsesStoredConfigurationDependenciesAndMetadataResolver(): void {
+    public function testTaskEnvironmentCreateRunnerUsesStoredConfigurationDependenciesAndMetadataResolver(): void {
         $connection = $this->createStub(\PDO::class);
         $configuration = new QueueConfiguration('custom_queue');
         $container = new InMemoryContainer([]);
@@ -128,7 +128,7 @@ final class QueueContextTest extends TestCase
         $runnerConfiguration = new RunnerConfiguration('runner-test');
         $metadataResolver = new MetadataResolver();
 
-        $context = new QueueContext(
+        $context = new TaskEnvironment(
             $connection,
             $configuration,
             $container,
@@ -151,10 +151,10 @@ final class QueueContextTest extends TestCase
         self::assertSame($queue, $this->readPrivateProperty($runner, 'queue'));
     }
 
-    public function testQueueContextCreatesSchemaHelpersFromStoredQueueConfiguration(): void {
+    public function testTaskEnvironmentCreatesSchemaHelpersFromStoredQueueConfiguration(): void {
         $connection = $this->createStub(\PDO::class);
         $configuration = new QueueConfiguration('custom_queue', 'custom_schema');
-        $context = new QueueContext($connection, $configuration);
+        $context = new TaskEnvironment($connection, $configuration);
 
         $queue = $context->getDatabaseQueue();
         $sameQueue = $context->getDatabaseQueue();
@@ -166,7 +166,7 @@ final class QueueContextTest extends TestCase
         self::assertSame($queue, $sameQueue);
         self::assertInstanceOf(SchemaManager::class, $schemaManager);
         self::assertSame($schemaManager, $sameSchemaManager);
-        self::assertSame($context, $this->readPrivateProperty($schemaManager, 'queueContext'));
+        self::assertSame($context, $this->readPrivateProperty($schemaManager, 'taskEnvironment'));
         self::assertStringContainsString('CREATE SCHEMA IF NOT EXISTS "custom_schema"', $ddl);
         self::assertStringContainsString(
             'CREATE TABLE IF NOT EXISTS "custom_schema"."custom_queue"',
@@ -174,7 +174,7 @@ final class QueueContextTest extends TestCase
         );
     }
 
-    public function testQueueContextGetTaskRehydratesTaskWithContainerAndLogger(): void {
+    public function testTaskEnvironmentGetTaskRehydratesTaskWithContainerAndLogger(): void {
         if (!in_array('sqlite', \PDO::getAvailableDrivers(), true)) {
             self::markTestSkipped('PDO SQLite driver is not available.');
         }
@@ -186,7 +186,7 @@ final class QueueContextTest extends TestCase
         $container = new InMemoryContainer([
             ConstructorInjectedServiceFixture::class => $service,
         ]);
-        $context = new QueueContext($connection, $configuration, $container, $logger);
+        $context = new TaskEnvironment($connection, $configuration, $container, $logger);
         $context->getSchemaManager()->bootstrap();
 
         $record = $context->enqueue(new ServiceAndLoggerInjectedTaskFixture($service, $logger));
@@ -200,7 +200,7 @@ final class QueueContextTest extends TestCase
         self::assertSame($logger, $task->getInjectedLogger());
     }
 
-    public function testQueueContextGetTasksReturnsAllTasksOrFiltersByState(): void {
+    public function testTaskEnvironmentGetTasksReturnsAllTasksOrFiltersByState(): void {
         if (!in_array('sqlite', \PDO::getAvailableDrivers(), true)) {
             self::markTestSkipped('PDO SQLite driver is not available.');
         }
@@ -210,7 +210,7 @@ final class QueueContextTest extends TestCase
         $container = new InMemoryContainer([
             ConstructorInjectedServiceFixture::class => new ConstructorInjectedServiceFixture('worker'),
         ]);
-        $context = new QueueContext($connection, $configuration, $container);
+        $context = new TaskEnvironment($connection, $configuration, $container);
         $context->getSchemaManager()->bootstrap();
 
         $failedRecord = $context->enqueue(new QueueWorkflowTaskFixture(), Task::PRIO_VERY_HIGH);
@@ -239,14 +239,14 @@ final class QueueContextTest extends TestCase
         self::assertInstanceOf(ConstructorInjectedTaskFixture::class, $allTasks[2]);
     }
 
-    public function testQueueContextUsesRunnerConfigurationDependenciesWhenContextOnesAreNotProvided(): void {
+    public function testTaskEnvironmentUsesRunnerConfigurationDependenciesWhenContextOnesAreNotProvided(): void {
         $connection = $this->createStub(\PDO::class);
         $configuration = new QueueConfiguration('custom_queue');
         $runnerContainer = new InMemoryContainer([]);
         $runnerLogger = new SpyLogger();
         $runnerConfiguration = new RunnerConfiguration('runner-test', true, 15, $runnerContainer, $runnerLogger);
 
-        $context = new QueueContext($connection, $configuration, runnerConfiguration: $runnerConfiguration);
+        $context = new TaskEnvironment($connection, $configuration, runnerConfiguration: $runnerConfiguration);
         $runner = $context->createRunner();
         $resolvedRunnerConfiguration = $this->readPrivateProperty($runner, 'runnerConfiguration');
 

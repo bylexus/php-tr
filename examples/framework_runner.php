@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-use ByLexus\TaskRunner\QueueContext;
+use ByLexus\TaskRunner\TaskEnvironment;
 use ByLexus\TaskRunner\RunnerConfiguration;
 use Psr\Log\LoggerInterface;
 
@@ -20,7 +20,7 @@ $pdo = new PDO($dsn, $user, $password);
 // The worker container is what allows constructor injection during task and step hydration.
 $container = new FrameworkDemoContainer();
 $logger = $container->get(LoggerInterface::class);
-$queue = new QueueContext(
+$env = new TaskEnvironment(
     $pdo,
     null,
     $container,
@@ -34,7 +34,7 @@ $queue = new QueueContext(
 );
 $mode = $argv[1] ?? 'single';
 
-$runner = $queue->createRunner();
+$runner = $env->createRunner();
 
 if ($mode === 'loop') {
     // Long-running mode is what you would usually supervise as a worker process.

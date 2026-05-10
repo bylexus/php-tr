@@ -10,7 +10,7 @@ use ByLexus\TaskRunner\FileAttachment;
 use ByLexus\TaskRunner\Queue\DatabaseQueue;
 use ByLexus\TaskRunner\Queue\QueueConfiguration;
 use ByLexus\TaskRunner\Queue\QueueRecord;
-use ByLexus\TaskRunner\QueueContext;
+use ByLexus\TaskRunner\TaskEnvironment;
 use ByLexus\TaskRunner\Runner;
 use ByLexus\TaskRunner\RunnerConfiguration;
 use ByLexus\TaskRunner\Task;
@@ -38,11 +38,11 @@ abstract class RunnerIntegrationTestCase extends AbstractDatabaseIntegrationTest
 
         try {
             $configuration = new QueueConfiguration($tableName);
-            $queueContext = new QueueContext($pdo, $configuration);
-            $queueContext->getSchemaManager()->bootstrap();
+            $taskEnvironment = new TaskEnvironment($pdo, $configuration);
+            $taskEnvironment->getSchemaManager()->bootstrap();
 
             $task = new RunnerNextStepExceptionTaskFixture();
-            $record = $task->enqueue($queueContext);
+            $record = $task->enqueue($taskEnvironment);
 
             self::assertNotNull($record->taskId);
 
@@ -78,12 +78,12 @@ abstract class RunnerIntegrationTestCase extends AbstractDatabaseIntegrationTest
             file_put_contents($sourcePath, 'runner attachment content');
 
             $configuration = new QueueConfiguration($tableName);
-            $queueContext = new QueueContext($pdo, $configuration);
-            $queueContext->getSchemaManager()->bootstrap();
+            $taskEnvironment = new TaskEnvironment($pdo, $configuration);
+            $taskEnvironment->getSchemaManager()->bootstrap();
 
             $task = new AttachmentRoundtripTaskFixture();
             $task->getPayload()->attachment = FileAttachment::fromFile($sourcePath);
-            $record = $task->enqueue($queueContext);
+            $record = $task->enqueue($taskEnvironment);
 
             self::assertNotNull($record->taskId);
 
@@ -112,12 +112,12 @@ abstract class RunnerIntegrationTestCase extends AbstractDatabaseIntegrationTest
 
         try {
             $configuration = new QueueConfiguration($tableName);
-            $queueContext = new QueueContext($pdo, $configuration);
-            $queueContext->getSchemaManager()->bootstrap();
+            $taskEnvironment = new TaskEnvironment($pdo, $configuration);
+            $taskEnvironment->getSchemaManager()->bootstrap();
 
             $task = new QueueWorkflowTaskFixture();
             $task->setPayload(['job' => 'runner']);
-            $record = $task->enqueue($queueContext);
+            $record = $task->enqueue($taskEnvironment);
 
             self::assertNotNull($record->taskId);
 
@@ -154,11 +154,11 @@ abstract class RunnerIntegrationTestCase extends AbstractDatabaseIntegrationTest
         try {
             $configuration = new QueueConfiguration($tableName);
             $logger = new SpyLogger();
-            $queueContext = new QueueContext($pdo, $configuration, logger: $logger);
-            $queueContext->getSchemaManager()->bootstrap();
+            $taskEnvironment = new TaskEnvironment($pdo, $configuration, logger: $logger);
+            $taskEnvironment->getSchemaManager()->bootstrap();
             $task = new QueueWorkflowTaskFixture($logger);
             $task->setPayload(['job' => 'runner-logs']);
-            $record = $task->enqueue($queueContext);
+            $record = $task->enqueue($taskEnvironment);
 
             self::assertNotNull($record->taskId);
 
@@ -201,9 +201,9 @@ abstract class RunnerIntegrationTestCase extends AbstractDatabaseIntegrationTest
 
         try {
             $configuration = new QueueConfiguration($tableName);
-            $queueContext = new QueueContext($pdo, $configuration);
+            $taskEnvironment = new TaskEnvironment($pdo, $configuration);
 
-            self::assertFalse($queueContext->getSchemaManager()->tableExists());
+            self::assertFalse($taskEnvironment->getSchemaManager()->tableExists());
 
             $runner = $this->createRunner(
                 $pdo,
@@ -212,7 +212,7 @@ abstract class RunnerIntegrationTestCase extends AbstractDatabaseIntegrationTest
             );
 
             self::assertSame(0, $runner->runSingle());
-            self::assertTrue($queueContext->getSchemaManager()->tableExists());
+            self::assertTrue($taskEnvironment->getSchemaManager()->tableExists());
         } finally {
             DatabaseIntegrationConnection::dropTableIfExists($pdo, $tableName);
         }
@@ -224,12 +224,12 @@ abstract class RunnerIntegrationTestCase extends AbstractDatabaseIntegrationTest
 
         try {
             $configuration = new QueueConfiguration($tableName);
-            $queueContext = new QueueContext($pdo, $configuration);
-            $queueContext->getSchemaManager()->bootstrap();
+            $taskEnvironment = new TaskEnvironment($pdo, $configuration);
+            $taskEnvironment->getSchemaManager()->bootstrap();
 
             $task = new RunnerExceptionTaskFixture();
             $task->setPayload(['to' => 'alex@example.com', 'from' => 'chuck@example.com']);
-            $record = $task->enqueue($queueContext);
+            $record = $task->enqueue($taskEnvironment);
 
             self::assertNotNull($record->taskId);
 
@@ -258,12 +258,12 @@ abstract class RunnerIntegrationTestCase extends AbstractDatabaseIntegrationTest
 
         try {
             $configuration = new QueueConfiguration($tableName);
-            $queueContext = new QueueContext($pdo, $configuration);
-            $queueContext->getSchemaManager()->bootstrap();
+            $taskEnvironment = new TaskEnvironment($pdo, $configuration);
+            $taskEnvironment->getSchemaManager()->bootstrap();
 
             $task = new PayloadHandoffTaskFixture();
             $task->setPayload(['to' => 'alex@example.com', 'from' => 'chuck@example.com']);
-            $record = $task->enqueue($queueContext);
+            $record = $task->enqueue($taskEnvironment);
 
             self::assertNotNull($record->taskId);
 
@@ -295,11 +295,11 @@ abstract class RunnerIntegrationTestCase extends AbstractDatabaseIntegrationTest
 
         try {
             $configuration = new QueueConfiguration($tableName);
-            $queueContext = new QueueContext($pdo, $configuration);
-            $queueContext->getSchemaManager()->bootstrap();
+            $taskEnvironment = new TaskEnvironment($pdo, $configuration);
+            $taskEnvironment->getSchemaManager()->bootstrap();
 
             $task = new PayloadMutationTaskFixture();
-            $record = $task->enqueue($queueContext);
+            $record = $task->enqueue($taskEnvironment);
 
             self::assertNotNull($record->taskId);
 
@@ -332,12 +332,12 @@ abstract class RunnerIntegrationTestCase extends AbstractDatabaseIntegrationTest
 
         try {
             $configuration = new QueueConfiguration($tableName);
-            $queueContext = new QueueContext($pdo, $configuration);
-            $queueContext->getSchemaManager()->bootstrap();
+            $taskEnvironment = new TaskEnvironment($pdo, $configuration);
+            $taskEnvironment->getSchemaManager()->bootstrap();
 
             $task = new QueueWorkflowTaskFixture();
             $task->setPayload(['job' => 'cleanup']);
-            $record = $task->enqueue($queueContext);
+            $record = $task->enqueue($taskEnvironment);
 
             self::assertNotNull($record->taskId);
 
@@ -375,12 +375,12 @@ abstract class RunnerIntegrationTestCase extends AbstractDatabaseIntegrationTest
 
         try {
             $configuration = new QueueConfiguration($tableName);
-            $queueContext = new QueueContext($pdo, $configuration);
-            $queueContext->getSchemaManager()->bootstrap();
+            $taskEnvironment = new TaskEnvironment($pdo, $configuration);
+            $taskEnvironment->getSchemaManager()->bootstrap();
 
             $task = new RunnerRetryTaskFixture();
             $task->setPayload(['failuresRemaining' => 1]);
-            $record = $task->enqueue($queueContext);
+            $record = $task->enqueue($taskEnvironment);
 
             self::assertNotNull($record->taskId);
 
@@ -412,12 +412,12 @@ abstract class RunnerIntegrationTestCase extends AbstractDatabaseIntegrationTest
 
         try {
             $configuration = new QueueConfiguration($tableName);
-            $queueContext = new QueueContext($pdo, $configuration);
-            $queueContext->getSchemaManager()->bootstrap();
+            $taskEnvironment = new TaskEnvironment($pdo, $configuration);
+            $taskEnvironment->getSchemaManager()->bootstrap();
 
             $task = new RunnerTimeoutTaskFixture();
             $task->setPayload(['job' => 'timeout']);
-            $record = $task->enqueue($queueContext);
+            $record = $task->enqueue($taskEnvironment);
 
             self::assertNotNull($record->taskId);
 
@@ -454,12 +454,12 @@ abstract class RunnerIntegrationTestCase extends AbstractDatabaseIntegrationTest
 
         try {
             $configuration = new QueueConfiguration($tableName);
-            $queueContext = new QueueContext($pdo, $configuration);
-            $queueContext->getSchemaManager()->bootstrap();
+            $taskEnvironment = new TaskEnvironment($pdo, $configuration);
+            $taskEnvironment->getSchemaManager()->bootstrap();
 
             $task = new RunnerTimeoutTaskFixture();
             $task->setPayload(['job' => 'stale-timeout']);
-            $record = $task->enqueue($queueContext);
+            $record = $task->enqueue($taskEnvironment);
 
             self::assertNotNull($record->taskId);
 
@@ -516,12 +516,12 @@ abstract class RunnerIntegrationTestCase extends AbstractDatabaseIntegrationTest
 
         try {
             $configuration = new QueueConfiguration($tableName);
-            $queueContext = new QueueContext($pdo, $configuration);
-            $queueContext->getSchemaManager()->bootstrap();
+            $taskEnvironment = new TaskEnvironment($pdo, $configuration);
+            $taskEnvironment->getSchemaManager()->bootstrap();
 
             $service = new ConstructorInjectedServiceFixture('mailer');
             $task = new ConstructorInjectedTaskFixture($service);
-            $record = $task->enqueue($queueContext);
+            $record = $task->enqueue($taskEnvironment);
 
             self::assertNotNull($record->taskId);
 
@@ -561,13 +561,13 @@ abstract class RunnerIntegrationTestCase extends AbstractDatabaseIntegrationTest
 
         try {
             $configuration = new QueueConfiguration($tableName);
-            $queueContext = new QueueContext($pdo, $configuration);
-            $queueContext->getSchemaManager()->bootstrap();
+            $taskEnvironment = new TaskEnvironment($pdo, $configuration);
+            $taskEnvironment->getSchemaManager()->bootstrap();
 
             $logger = new SpyLogger();
             $service = new ConstructorInjectedServiceFixture('mailer');
             $task = new ServiceAndLoggerInjectedTaskFixture($service, $logger);
-            $record = $task->enqueue($queueContext);
+            $record = $task->enqueue($taskEnvironment);
 
             self::assertNotNull($record->taskId);
 
@@ -616,11 +616,11 @@ abstract class RunnerIntegrationTestCase extends AbstractDatabaseIntegrationTest
 
         try {
             $configuration = new QueueConfiguration($tableName);
-            $queueContext = new QueueContext($pdo, $configuration);
-            $queueContext->getSchemaManager()->bootstrap();
+            $taskEnvironment = new TaskEnvironment($pdo, $configuration);
+            $taskEnvironment->getSchemaManager()->bootstrap();
 
             $task = new ConstructorInjectedTaskFixture(new ConstructorInjectedServiceFixture('mailer'));
-            $record = $task->enqueue($queueContext);
+            $record = $task->enqueue($taskEnvironment);
 
             self::assertNotNull($record->taskId);
 
@@ -662,11 +662,11 @@ abstract class RunnerIntegrationTestCase extends AbstractDatabaseIntegrationTest
 
         try {
             $configuration = new QueueConfiguration($tableName);
-            $queueContext = new QueueContext($pdo, $configuration);
-            $queueContext->getSchemaManager()->bootstrap();
+            $taskEnvironment = new TaskEnvironment($pdo, $configuration);
+            $taskEnvironment->getSchemaManager()->bootstrap();
 
             $task = new StepInjectedOnlyTaskFixture();
-            $record = $task->enqueue($queueContext);
+            $record = $task->enqueue($taskEnvironment);
 
             self::assertNotNull($record->taskId);
 
@@ -706,12 +706,12 @@ abstract class RunnerIntegrationTestCase extends AbstractDatabaseIntegrationTest
 
         try {
             $configuration = new QueueConfiguration($tableName);
-            $queueContext = new QueueContext($pdo, $configuration);
-            $queueContext->getSchemaManager()->bootstrap();
+            $taskEnvironment = new TaskEnvironment($pdo, $configuration);
+            $taskEnvironment->getSchemaManager()->bootstrap();
 
             $task = new RetainedQueueWorkflowTaskFixture();
             $task->setPayload(['job' => 'loop']);
-            $record = $task->enqueue($queueContext);
+            $record = $task->enqueue($taskEnvironment);
 
             self::assertNotNull($record->taskId);
 
@@ -761,11 +761,11 @@ abstract class RunnerIntegrationTestCase extends AbstractDatabaseIntegrationTest
 
         try {
             $configuration = new QueueConfiguration($tableName);
-            $queueContext = new QueueContext($pdo, $configuration);
-            $queueContext->getSchemaManager()->bootstrap();
+            $taskEnvironment = new TaskEnvironment($pdo, $configuration);
+            $taskEnvironment->getSchemaManager()->bootstrap();
 
             $task = new SignalControlledShutdownTaskFixture();
-            $record = $task->enqueue($queueContext);
+            $record = $task->enqueue($taskEnvironment);
 
             self::assertNotNull($record->taskId);
 
@@ -846,13 +846,13 @@ abstract class RunnerIntegrationTestCase extends AbstractDatabaseIntegrationTest
 
         try {
             $configuration = new QueueConfiguration($tableName);
-            $queueContext = new QueueContext($pdo, $configuration);
-            $queueContext->getSchemaManager()->bootstrap();
+            $taskEnvironment = new TaskEnvironment($pdo, $configuration);
+            $taskEnvironment->getSchemaManager()->bootstrap();
 
             $gracefulTask = new SignalControlledShutdownTaskFixture();
-            $gracefulRecord = $gracefulTask->enqueue($queueContext);
+            $gracefulRecord = $gracefulTask->enqueue($taskEnvironment);
             $followUpTask = new QueueWorkflowTaskFixture();
-            $followUpRecord = $followUpTask->enqueue($queueContext);
+            $followUpRecord = $followUpTask->enqueue($taskEnvironment);
 
             self::assertNotNull($gracefulRecord->taskId);
             self::assertNotNull($followUpRecord->taskId);
@@ -954,8 +954,8 @@ abstract class RunnerIntegrationTestCase extends AbstractDatabaseIntegrationTest
 
         try {
             $configuration = new QueueConfiguration($tableName);
-            $queueContext = new QueueContext($pdo, $configuration);
-            $queueContext->getSchemaManager()->bootstrap();
+            $taskEnvironment = new TaskEnvironment($pdo, $configuration);
+            $taskEnvironment->getSchemaManager()->bootstrap();
 
             $process = proc_open(
                 [PHP_BINARY, 'tests/Support/run-loop.php', $tableName, $markerPath, 'plain-pdo', '5', $readyPath],
@@ -977,7 +977,7 @@ abstract class RunnerIntegrationTestCase extends AbstractDatabaseIntegrationTest
 
                 $task = new RetainedQueueWorkflowTaskFixture();
                 $task->setPayload(['job' => 'plain-pdo-notify']);
-                $record = $task->enqueue($queueContext);
+                $record = $task->enqueue($taskEnvironment);
 
                 self::assertNotNull($record->taskId);
                 $this->waitForTaskStatus($pdo, $tableName, (int) $record->taskId, TaskStatus::SUCCEEDED->value, 20);
@@ -1006,12 +1006,12 @@ abstract class RunnerIntegrationTestCase extends AbstractDatabaseIntegrationTest
 
         try {
             $configuration = new QueueConfiguration($tableName);
-            $queueContext = new QueueContext($pdo, $configuration);
-            $queueContext->getSchemaManager()->bootstrap();
+            $taskEnvironment = new TaskEnvironment($pdo, $configuration);
+            $taskEnvironment->getSchemaManager()->bootstrap();
 
             $task = new RunnerRetryTaskFixture();
             $task->setPayload(['failuresRemaining' => 2]);
-            $record = $task->enqueue($queueContext);
+            $record = $task->enqueue($taskEnvironment);
 
             self::assertNotNull($record->taskId);
 
@@ -1043,12 +1043,12 @@ abstract class RunnerIntegrationTestCase extends AbstractDatabaseIntegrationTest
 
         try {
             $configuration = new QueueConfiguration($tableName);
-            $queueContext = new QueueContext($pdo, $configuration);
-            $queueContext->getSchemaManager()->bootstrap();
+            $taskEnvironment = new TaskEnvironment($pdo, $configuration);
+            $taskEnvironment->getSchemaManager()->bootstrap();
 
             $task = new QueueWorkflowTaskFixture();
             $task->setPayload(['job' => 'cancel']);
-            $record = $task->enqueue($queueContext);
+            $record = $task->enqueue($taskEnvironment);
 
             self::assertNotNull($record->taskId);
 
@@ -1084,11 +1084,11 @@ abstract class RunnerIntegrationTestCase extends AbstractDatabaseIntegrationTest
 
         try {
             $configuration = new QueueConfiguration($tableName);
-            $queueContext = new QueueContext($pdo, $configuration);
-            $queueContext->getSchemaManager()->bootstrap();
+            $taskEnvironment = new TaskEnvironment($pdo, $configuration);
+            $taskEnvironment->getSchemaManager()->bootstrap();
 
             $task = new CancellingTaskFixture();
-            $record = $task->enqueue($queueContext);
+            $record = $task->enqueue($taskEnvironment);
 
             self::assertNotNull($record->taskId);
 
@@ -1171,7 +1171,7 @@ abstract class RunnerIntegrationTestCase extends AbstractDatabaseIntegrationTest
         QueueConfiguration $configuration,
         ?RunnerConfiguration $runnerConfiguration = null,
     ): Runner {
-        return (new QueueContext($pdo, $configuration, runnerConfiguration: $runnerConfiguration))->createRunner();
+        return (new TaskEnvironment($pdo, $configuration, runnerConfiguration: $runnerConfiguration))->createRunner();
     }
 
     private function qualifiedIdentifier(\PDO $pdo, string $identifier): string {

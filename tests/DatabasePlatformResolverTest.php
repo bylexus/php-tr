@@ -9,7 +9,7 @@ use ByLexus\TaskRunner\Queue\Db\DatabasePlatformResolver;
 use ByLexus\TaskRunner\Queue\Db\MySqlPlatform;
 use ByLexus\TaskRunner\Queue\Db\PostgresPlatform;
 use ByLexus\TaskRunner\Queue\QueueConfiguration;
-use ByLexus\TaskRunner\QueueContext;
+use ByLexus\TaskRunner\TaskEnvironment;
 use PHPUnit\Framework\TestCase;
 
 final class DatabasePlatformResolverTest extends TestCase
@@ -59,7 +59,7 @@ final class DatabasePlatformResolverTest extends TestCase
         $this->expectException(ConfigurationException::class);
         $this->expectExceptionMessage('SQLite queue configuration does not support schema names.');
 
-        (new QueueContext(
+        (new TaskEnvironment(
             $this->mockPdo('sqlite'),
             new QueueConfiguration('task_queue', 'app_jobs'),
         ))->getSchemaManager();

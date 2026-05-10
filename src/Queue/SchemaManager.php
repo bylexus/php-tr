@@ -7,7 +7,7 @@ namespace ByLexus\TaskRunner\Queue;
 use ByLexus\TaskRunner\Exception\ConfigurationException;
 use ByLexus\TaskRunner\Queue\Db\DatabasePlatform;
 use ByLexus\TaskRunner\Queue\Db\DatabasePlatformResolver;
-use ByLexus\TaskRunner\QueueContext;
+use ByLexus\TaskRunner\TaskEnvironment;
 
 /**
  * Manages the queue schema.
@@ -57,26 +57,26 @@ final class SchemaManager {
         'created_at',
     ];
 
-    private QueueContext $queueContext;
+    private TaskEnvironment $taskEnvironment;
     private DatabasePlatform $platform;
 
-    public function __construct(QueueContext $queueContext) {
-        $this->queueContext = $queueContext;
-        $this->platform = DatabasePlatformResolver::resolve($this->queueContext->getConnection());
-        $this->platform->validateConfiguration($this->queueContext->getQueueConfiguration());
+    public function __construct(TaskEnvironment $taskEnvironment) {
+        $this->taskEnvironment = $taskEnvironment;
+        $this->platform = DatabasePlatformResolver::resolve($this->taskEnvironment->getConnection());
+        $this->platform->validateConfiguration($this->taskEnvironment->getQueueConfiguration());
     }
 
     /** @return list<string> */
     private function bootstrapStatements(): array {
         return $this->platform->bootstrapSchemaStatements(
-            $this->queueContext->getConnection(),
-            $this->queueContext->getQueueConfiguration(),
+            $this->taskEnvironment->getConnection(),
+            $this->taskEnvironment->getQueueConfiguration(),
         );
     }
 
     /** @return list<string> */
     private function exportStatements(): array {
-        return $this->platform->exportSchemaStatements($this->queueContext->getQueueConfiguration());
+        return $this->platform->exportSchemaStatements($this->taskEnvironment->getQueueConfiguration());
     }
 
     public function exportDdl(): string {
@@ -85,34 +85,34 @@ final class SchemaManager {
 
     public function bootstrap(): void {
         foreach ($this->bootstrapStatements() as $statement) {
-            $this->queueContext->getConnection()->exec($statement);
+            $this->taskEnvironment->getConnection()->exec($statement);
         }
 
         $this->validate();
     }
 
     public function validate(): void {
-        $columns = $this->fetchColumnNames($this->queueContext->getQueueConfiguration()->getTableName());
+        $columns = $this->fetchColumnNames($this->taskEnvironment->getQueueConfiguration()->getTableName());
         $missingColumns = array_values(array_diff(self::REQUIRED_COLUMNS, $columns));
 
         if ($missingColumns !== []) {
             throw new ConfigurationException(
                 sprintf(
                     'Queue table %s is missing required columns: %s',
-                    $this->queueContext->getQueueConfiguration()->getTableName(),
+                    $this->taskEnvironment->getQueueConfiguration()->getTableName(),
                     implode(', ', $missingColumns),
                 ),
             );
         }
 
-        $blobColumns = $this->fetchColumnNames($this->queueContext->getQueueConfiguration()->getBlobTableName());
+        $blobColumns = $this->fetchColumnNames($this->taskEnvironment->getQueueConfiguration()->getBlobTableName());
         $missingBlobColumns = array_values(array_diff(self::REQUIRED_BLOB_COLUMNS, $blobColumns));
 
         if ($missingBlobColumns !== []) {
             throw new ConfigurationException(
                 sprintf(
                     'Attachment blob table %s is missing required columns: %s',
-                    $this->queueContext->getQueueConfiguration()->getBlobTableName(),
+                    $this->taskEnvironment->getQueueConfiguration()->getBlobTableName(),
                     implode(', ', $missingBlobColumns),
                 ),
             );
@@ -120,17 +120,17 @@ final class SchemaManager {
     }
 
     public function tableExists(): bool {
-        return $this->schemaTableExists($this->queueContext->getQueueConfiguration()->getTableName());
+        return $this->schemaTableExists($this->taskEnvironment->getQueueConfiguration()->getTableName());
     }
 
     public function blobTableExists(): bool {
-        return $this->schemaTableExists($this->queueContext->getQueueConfiguration()->getBlobTableName());
+        return $this->schemaTableExists($this->taskEnvironment->getQueueConfiguration()->getBlobTableName());
     }
 
     private function schemaTableExists(string $tableName): bool {
         return $this->platform->tableExists(
-            $this->queueContext->getConnection(),
-            $this->queueContext->getQueueConfiguration(),
+            $this->taskEnvironment->getConnection(),
+            $this->taskEnvironment->getQueueConfiguration(),
             $tableName,
         );
     }
@@ -138,8 +138,8 @@ final class SchemaManager {
     /** @return list<string> */
     private function fetchColumnNames(string $tableName): array {
         return $this->platform->fetchColumnNames(
-            $this->queueContext->getConnection(),
-            $this->queueContext->getQueueConfiguration(),
+            $this->taskEnvironment->getConnection(),
+            $this->taskEnvironment->getQueueConfiguration(),
             $tableName,
         );
     }

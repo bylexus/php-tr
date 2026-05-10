@@ -6,14 +6,14 @@ namespace ByLexus\TaskRunner\Tests;
 
 use ByLexus\TaskRunner\Queue\QueueConfiguration;
 use ByLexus\TaskRunner\Queue\SchemaManager;
-use ByLexus\TaskRunner\QueueContext;
+use ByLexus\TaskRunner\TaskEnvironment;
 use PHPUnit\Framework\TestCase;
 
 final class SchemaManagerTest extends TestCase
 {
     public function testExportDdlUsesConfiguredTableNameAndIncludesCleanupColumn(): void {
         $ddl = (new SchemaManager(
-            $this->createQueueContext($this->mockPdo('pgsql'), new QueueConfiguration('custom_queue')),
+            $this->createTaskEnvironment($this->mockPdo('pgsql'), new QueueConfiguration('custom_queue')),
         ))
             ->exportDdl();
 
@@ -41,7 +41,7 @@ final class SchemaManagerTest extends TestCase
         $pdo->expects(self::never())->method('exec');
 
         $schemaManager = new SchemaManager(
-            $this->createQueueContext($pdo, new QueueConfiguration('custom_queue')),
+            $this->createTaskEnvironment($pdo, new QueueConfiguration('custom_queue')),
         );
 
         self::assertInstanceOf(SchemaManager::class, $schemaManager);
@@ -49,7 +49,7 @@ final class SchemaManagerTest extends TestCase
 
     public function testExportDdlUsesConfiguredSchemaWhenProvided(): void {
         $ddl = (new SchemaManager(
-            $this->createQueueContext($this->mockPdo('pgsql'), new QueueConfiguration('custom_queue', 'custom_schema')),
+            $this->createTaskEnvironment($this->mockPdo('pgsql'), new QueueConfiguration('custom_queue', 'custom_schema')),
         ))->exportDdl();
 
         self::assertStringContainsString('CREATE SCHEMA IF NOT EXISTS "custom_schema"', $ddl);
@@ -66,7 +66,7 @@ final class SchemaManagerTest extends TestCase
 
     public function testExportDdlUsesMysqlSyntaxAndConfiguredDatabaseWhenProvided(): void {
         $ddl = (new SchemaManager(
-            $this->createQueueContext(
+            $this->createTaskEnvironment(
                 $this->mockPdo('mysql', '8.4.5'),
                 new QueueConfiguration('custom_queue', 'custom_app'),
             ),
@@ -84,7 +84,7 @@ final class SchemaManagerTest extends TestCase
 
     public function testExportDdlUsesSqliteCompatibleTypes(): void {
         $ddl = (new SchemaManager(
-            $this->createQueueContext($this->mockPdo('sqlite'), new QueueConfiguration('custom_queue')),
+            $this->createTaskEnvironment($this->mockPdo('sqlite'), new QueueConfiguration('custom_queue')),
         ))->exportDdl();
 
         self::assertStringContainsString('CREATE TABLE IF NOT EXISTS "custom_queue"', $ddl);
@@ -103,7 +103,7 @@ final class SchemaManagerTest extends TestCase
 
         $pdo = new \PDO('sqlite::memory:');
         $schemaManager = new SchemaManager(
-            $this->createQueueContext($pdo, new QueueConfiguration('custom_queue')),
+            $this->createTaskEnvironment($pdo, new QueueConfiguration('custom_queue')),
         );
 
         $schemaManager->bootstrap();
@@ -128,7 +128,7 @@ final class SchemaManagerTest extends TestCase
         return $pdo;
     }
 
-    private function createQueueContext(\PDO $pdo, ?QueueConfiguration $configuration = null): QueueContext {
-        return new QueueContext($pdo, $configuration);
+    private function createTaskEnvironment(\PDO $pdo, ?QueueConfiguration $configuration = null): TaskEnvironment {
+        return new TaskEnvironment($pdo, $configuration);
     }
 }
