@@ -57,7 +57,7 @@ class Runner {
         $this->metadataResolver = $queueContext->getMetadataResolver();
         $this->logger = $this->runnerConfiguration->getLogger() ?? new NullLogger();
         $this->platform = DatabasePlatformResolver::resolve($this->connection);
-        $this->queue = new DatabaseQueue($this->connection, $this->queueConfiguration, $this->logger);
+        $this->queue = $queueContext->getDatabaseQueue();
         $this->signalHandler = new SignalHandler($this->handleStopRequested(...));
 
         $this->logger->debug('Runner initialized.', [

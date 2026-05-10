@@ -137,6 +137,7 @@ final class QueueContextTest extends TestCase
             $metadataResolver,
         );
         $runner = $context->createRunner();
+        $queue = $context->getDatabaseQueue();
         $resolvedRunnerConfiguration = $this->readPrivateProperty($runner, 'runnerConfiguration');
 
         self::assertSame($connection, $this->readPrivateProperty($runner, 'connection'));
@@ -147,6 +148,7 @@ final class QueueContextTest extends TestCase
         self::assertSame($logger, $resolvedRunnerConfiguration->getLogger());
         self::assertSame($metadataResolver, $this->readPrivateProperty($runner, 'metadataResolver'));
         self::assertSame($logger, $this->readPrivateProperty($runner, 'logger'));
+        self::assertSame($queue, $this->readPrivateProperty($runner, 'queue'));
     }
 
     public function testQueueContextCreatesSchemaHelpersFromStoredQueueConfiguration(): void {
@@ -154,10 +156,14 @@ final class QueueContextTest extends TestCase
         $configuration = new QueueConfiguration('custom_queue', 'custom_schema');
         $context = new QueueContext($connection, $configuration);
 
+        $queue = $context->getDatabaseQueue();
+        $sameQueue = $context->getDatabaseQueue();
         $schemaManager = $context->getSchemaManager();
         $sameSchemaManager = $context->getSchemaManager();
-        $ddl = $context->exportDdl();
+        $ddl = $context->getSchemaManager()->exportDdl();
 
+        self::assertInstanceOf(DatabaseQueue::class, $queue);
+        self::assertSame($queue, $sameQueue);
         self::assertInstanceOf(SchemaManager::class, $schemaManager);
         self::assertSame($schemaManager, $sameSchemaManager);
         self::assertSame($context, $this->readPrivateProperty($schemaManager, 'queueContext'));
@@ -181,7 +187,7 @@ final class QueueContextTest extends TestCase
             ConstructorInjectedServiceFixture::class => $service,
         ]);
         $context = new QueueContext($connection, $configuration, $container, $logger);
-        $context->bootstrapSchema();
+        $context->getSchemaManager()->bootstrap();
 
         $record = $context->enqueue(new ServiceAndLoggerInjectedTaskFixture($service, $logger));
 
@@ -205,7 +211,7 @@ final class QueueContextTest extends TestCase
             ConstructorInjectedServiceFixture::class => new ConstructorInjectedServiceFixture('worker'),
         ]);
         $context = new QueueContext($connection, $configuration, $container);
-        $context->bootstrapSchema();
+        $context->getSchemaManager()->bootstrap();
 
         $failedRecord = $context->enqueue(new QueueWorkflowTaskFixture(), Task::PRIO_VERY_HIGH);
         $queuedRecord = $context->enqueue(new QueueWorkflowTaskFixture(), Task::PRIO_HIGH);

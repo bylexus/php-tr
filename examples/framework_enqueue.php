@@ -19,7 +19,7 @@ $container = new FrameworkDemoContainer();
 $logger = $container->get(LoggerInterface::class);
 $queue = new QueueContext($pdo, null, $container, $logger);
 // Producer commands often own schema bootstrap in real applications or deployment jobs.
-$queue->bootstrapSchema();
+$queue->getSchemaManager()->bootstrap();
 $userId = (int) ($argv[1] ?? 42);
 
 // Enqueue side can instantiate the task directly, just like any other application service.

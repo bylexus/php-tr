@@ -223,11 +223,7 @@ abstract class Task {
             'stepClass' => $firstStep::class,
         ]);
 
-        $queue = new DatabaseQueue(
-            $queueContext->getConnection(),
-            $queueContext->getQueueConfiguration(),
-            $this->baseLogger,
-        );
+        $queue = $queueContext->getDatabaseQueue();
         $record = $queue->enqueue($this, $firstStep, $priority);
 
         $firstStep->hydrateFromQueueRecord($record);

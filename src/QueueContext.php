@@ -30,6 +30,7 @@ final class QueueContext {
     private ?LoggerInterface $logger;
     private RunnerConfiguration $runnerConfiguration;
     private MetadataResolver $metadataResolver;
+    private ?DatabaseQueue $databaseQueue = null;
     private ?SchemaManager $schemaManager = null;
 
     public function __construct(
@@ -64,6 +65,17 @@ final class QueueContext {
     }
 
     /**
+     * Returns the lazily-created DatabaseQueue bound to this QueueContext.
+     */
+    public function getDatabaseQueue(): DatabaseQueue {
+        if ($this->databaseQueue === null) {
+            $this->databaseQueue = new DatabaseQueue($this->connection, $this->queueConfiguration, $this->logger);
+        }
+
+        return $this->databaseQueue;
+    }
+
+    /**
      * Returns the stored runner configuration for QueueContext-based runner creation.
      */
     public function getRunnerConfiguration(): RunnerConfiguration {
@@ -75,7 +87,7 @@ final class QueueContext {
     }
 
     public function getTask(int $taskId): Task {
-        $queue = $this->createDatabaseQueue();
+        $queue = $this->getDatabaseQueue();
 
         return $this->hydrateTask($queue->get($taskId), $queue);
     }
@@ -84,7 +96,7 @@ final class QueueContext {
      * @return list<Task>
      */
     public function getTasks(?TaskStatus $taskStatus = null): array {
-        $queue = $this->createDatabaseQueue();
+        $queue = $this->getDatabaseQueue();
         $tasks = [];
 
         foreach ($queue->find($taskStatus) as $record) {
@@ -107,30 +119,6 @@ final class QueueContext {
         }
 
         return $this->schemaManager;
-    }
-
-    public function bootstrapSchema(): void {
-        $this->getSchemaManager()->bootstrap();
-    }
-
-    public function validateSchema(): void {
-        $this->getSchemaManager()->validate();
-    }
-
-    public function tableExists(): bool {
-        return $this->getSchemaManager()->tableExists();
-    }
-
-    public function blobTableExists(): bool {
-        return $this->getSchemaManager()->blobTableExists();
-    }
-
-    public function exportDdl(): string {
-        return $this->getSchemaManager()->exportDdl();
-    }
-
-    private function createDatabaseQueue(): DatabaseQueue {
-        return new DatabaseQueue($this->connection, $this->queueConfiguration, $this->logger);
     }
 
     private function hydrateTask(QueueRecord $record, DatabaseQueue $queue): Task {

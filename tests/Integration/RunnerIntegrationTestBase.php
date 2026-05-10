@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace ByLexus\TaskRunner\Tests\Support;
+namespace ByLexus\TaskRunner\Tests\Integration;
 
 use ByLexus\TaskRunner\Enum\StepStatus;
 use ByLexus\TaskRunner\Enum\TaskStatus;
@@ -14,6 +14,7 @@ use ByLexus\TaskRunner\QueueContext;
 use ByLexus\TaskRunner\Runner;
 use ByLexus\TaskRunner\RunnerConfiguration;
 use ByLexus\TaskRunner\Task;
+use ByLexus\TaskRunner\Tests\Support\AbstractDatabaseIntegrationTestCase;
 use ByLexus\TaskRunner\Tests\Fixture\ConstructorInjectedServiceFixture;
 use ByLexus\TaskRunner\Tests\Fixture\ConstructorInjectedTaskFixture;
 use ByLexus\TaskRunner\Tests\Fixture\SignalControlledShutdownTaskFixture;
@@ -29,8 +30,11 @@ use ByLexus\TaskRunner\Tests\Fixture\RunnerTimeoutTaskFixture;
 use ByLexus\TaskRunner\Tests\Fixture\QueueWorkflowTaskFixture;
 use ByLexus\TaskRunner\Tests\Fixture\ServiceAndLoggerInjectedTaskFixture;
 use ByLexus\TaskRunner\Tests\Fixture\StepInjectedOnlyTaskFixture;
+use ByLexus\TaskRunner\Tests\Support\DatabaseIntegrationConnection;
+use ByLexus\TaskRunner\Tests\Support\InMemoryContainer;
+use ByLexus\TaskRunner\Tests\Support\SpyLogger;
 
-abstract class RunnerIntegrationTestCase extends AbstractDatabaseIntegrationTestCase
+abstract class RunnerIntegrationTestBase extends AbstractDatabaseIntegrationTestCase
 {
     public function testRunSingleMarksTaskFailedWhenNextStepThrows(): void {
         $pdo = DatabaseIntegrationConnection::requirePdo($this);

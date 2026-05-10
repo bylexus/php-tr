@@ -64,14 +64,14 @@ Create the DB objects automatically:
 
 ```php
 // Reuse the same QueueContext for schema management, enqueueing, and runners.
-$context->bootstrapSchema();
+$context->getSchemaManager()->bootstrap();
 ```
 
 or by exporting the needed SQL through your own tooling:
 
 ```php
 
-$ddl = $context->exportDdl();
+$ddl = $context->getSchemaManager()->exportDdl();
 
 // Dump, log, or feed $ddl into your migration tooling.
 ```
@@ -357,10 +357,10 @@ Use this when your framework has an installation command, deploy hook, or startu
 ```php
 use ByLexus\TaskRunner\QueueContext;
 
-(new QueueContext($pdo))->bootstrapSchema();
+(new QueueContext($pdo))->getSchemaManager()->bootstrap();
 ```
 
-If you already use a `QueueContext`, the same wrapper can also manage the schema for that queue:
+If you already use a `QueueContext`, its `SchemaManager` can also manage the schema for that queue:
 
 ```php
 use ByLexus\TaskRunner\Queue\QueueConfiguration;
@@ -368,8 +368,8 @@ use ByLexus\TaskRunner\QueueContext;
 
 $queueConfiguration = new QueueConfiguration('app_background_jobs', 'background_jobs');
 $context = new QueueContext($pdo, $queueConfiguration);
-$context->bootstrapSchema();
-$context->validateSchema();
+$context->getSchemaManager()->bootstrap();
+$context->getSchemaManager()->validate();
 ```
 
 This is the most predictable option in production. It creates the queue table if not present, and / or updates it.
@@ -387,7 +387,7 @@ $context = new QueueContext(
     new QueueConfiguration('custom_queue_table', 'background_jobs'),
 );
 
-$ddl = $context->exportDdl();
+$ddl = $context->getSchemaManager()->exportDdl();
 ```
 
 This returns the exact DDL string for the configured queue table and backend resolved from your live PDO connection. The library does not ship a standalone dump script anymore; wiring the export into your migration or deployment tooling is your responsibility.
@@ -425,7 +425,7 @@ $context->createRunner()->runLoop();
 
 The same `QueueConfiguration` must be used consistently by producers, runners, and schema bootstrap.
 
-`QueueContext` is the simplest way to enforce that consistency in application code because it exposes `getTask()`, `getTasks()`, `createRunner()`, `getSchemaManager()`, `bootstrapSchema()`, `validateSchema()`, `tableExists()`, `blobTableExists()`, and `exportDdl()` on the same shared queue context backed by the configured PDO connection.
+`QueueContext` is the simplest way to enforce that consistency in application code because it exposes `getTask()`, `getTasks()`, `createRunner()`, and `getSchemaManager()` on the same shared queue context backed by the configured PDO connection.
 
 To place the queue in a specific namespace, pass the schema name as the second argument:
 

@@ -67,7 +67,7 @@ final class GreetingTask extends Task {
 $pdo = new PDO($dsn, $user, $password);
 $queue = new QueueContext($pdo);
 // Quickstart performs an explicit schema bootstrap instead of relying on worker startup side effects.
-$queue->bootstrapSchema();
+$queue->getSchemaManager()->bootstrap();
 
 // The task owns the payload. Here we seed it before enqueueing the first step.
 $task = (new GreetingTask())->withName($argv[1] ?? 'PHP TR');

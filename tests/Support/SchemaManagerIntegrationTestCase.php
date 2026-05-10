@@ -17,11 +17,11 @@ abstract class SchemaManagerIntegrationTestCase extends AbstractDatabaseIntegrat
             $configuration = new QueueConfiguration($tableName);
             $queueContext = new QueueContext($pdo, $configuration);
 
-            $queueContext->bootstrapSchema();
-            $queueContext->bootstrapSchema();
+            $queueContext->getSchemaManager()->bootstrap();
+            $queueContext->getSchemaManager()->bootstrap();
 
-            self::assertTrue($queueContext->tableExists());
-            self::assertTrue($queueContext->blobTableExists());
+            self::assertTrue($queueContext->getSchemaManager()->tableExists());
+            self::assertTrue($queueContext->getSchemaManager()->blobTableExists());
             self::assertTrue($this->columnExists($pdo, $tableName, 'cleanup_at'));
             self::assertTrue($this->columnExists($pdo, $tableName, 'priority'));
             self::assertTrue($this->columnExists($pdo, $configuration->getBlobTableName(), 'content'));
@@ -38,7 +38,7 @@ abstract class SchemaManagerIntegrationTestCase extends AbstractDatabaseIntegrat
 
         try {
             $queueContext = new QueueContext($pdo, new QueueConfiguration($tableName));
-            $ddl = $queueContext->exportDdl();
+            $ddl = $queueContext->getSchemaManager()->exportDdl();
 
             foreach ($this->statementsFromDdl($ddl) as $statement) {
                 $pdo->exec($statement);
@@ -46,9 +46,9 @@ abstract class SchemaManagerIntegrationTestCase extends AbstractDatabaseIntegrat
 
             $queueContext = new QueueContext($pdo, new QueueConfiguration($tableName));
 
-            self::assertTrue($queueContext->tableExists());
-            self::assertTrue($queueContext->blobTableExists());
-            $queueContext->validateSchema();
+            self::assertTrue($queueContext->getSchemaManager()->tableExists());
+            self::assertTrue($queueContext->getSchemaManager()->blobTableExists());
+            $queueContext->getSchemaManager()->validate();
             self::assertTrue($this->columnExists($pdo, $tableName, 'cleanup_at'));
             self::assertTrue($this->columnExists($pdo, $tableName, 'priority'));
             self::assertTrue($this->columnExists($pdo, sprintf('%s_blob_data', $tableName), 'content'));
@@ -69,7 +69,7 @@ abstract class SchemaManagerIntegrationTestCase extends AbstractDatabaseIntegrat
             $configuration = new QueueConfiguration($tableName);
             $queueContext = new QueueContext($pdo, $configuration);
 
-            $queueContext->bootstrapSchema();
+            $queueContext->getSchemaManager()->bootstrap();
 
             self::assertTrue($this->indexExists($pdo, sprintf('%s_cleanup_at_idx', $tableName)));
             self::assertTrue($this->indexExists($pdo, sprintf('%s_task_status_available_at_idx', $tableName)));
@@ -86,7 +86,7 @@ abstract class SchemaManagerIntegrationTestCase extends AbstractDatabaseIntegrat
         try {
             $this->createLegacyQueueTableWithoutPriority($pdo, $tableName);
 
-            (new QueueContext($pdo, new QueueConfiguration($tableName)))->bootstrapSchema();
+            (new QueueContext($pdo, new QueueConfiguration($tableName)))->getSchemaManager()->bootstrap();
 
             self::assertTrue($this->columnExists($pdo, $tableName, 'priority'));
         } finally {
@@ -111,10 +111,10 @@ abstract class SchemaManagerIntegrationTestCase extends AbstractDatabaseIntegrat
             $configuration = new QueueConfiguration($tableName, $schemaName);
             $queueContext = new QueueContext($pdo, $configuration);
 
-            $queueContext->bootstrapSchema();
+            $queueContext->getSchemaManager()->bootstrap();
 
-            self::assertTrue($queueContext->tableExists());
-            self::assertTrue($queueContext->blobTableExists());
+            self::assertTrue($queueContext->getSchemaManager()->tableExists());
+            self::assertTrue($queueContext->getSchemaManager()->blobTableExists());
             self::assertTrue($this->columnExists($pdo, $tableName, 'cleanup_at', $schemaName));
             self::assertTrue($this->columnExists($pdo, $configuration->getBlobTableName(), 'content', $schemaName));
             self::assertTrue($this->indexExists($pdo, sprintf('%s_cleanup_at_idx', $tableName), $schemaName));

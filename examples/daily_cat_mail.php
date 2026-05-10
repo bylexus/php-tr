@@ -19,7 +19,7 @@ $qc = new QueueConfiguration(schemaName: 'tr_test');
 // $conn = new PDO("sqlite:sqlite-test.db");
 // $qc = new QueueConfiguration();
 $queue = new QueueContext($conn, $qc);
-$queue->bootstrapSchema();
+$queue->getSchemaManager()->bootstrap();
 
 $container = new ExampleServiceContainer();
 

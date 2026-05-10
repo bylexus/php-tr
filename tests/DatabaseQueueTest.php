@@ -81,7 +81,7 @@ final class DatabaseQueueTest extends TestCase
         $configuration = new QueueConfiguration('task_queue');
         $queueContext = new QueueContext($pdo, $configuration);
 
-        $queueContext->bootstrapSchema();
+        $queueContext->getSchemaManager()->bootstrap();
 
         $queue = new DatabaseQueue($pdo, $configuration);
         $task = new QueueWorkflowTaskFixture();
@@ -101,7 +101,7 @@ final class DatabaseQueueTest extends TestCase
         $configuration = new QueueConfiguration('task_queue');
         $queueContext = new QueueContext($pdo, $configuration);
 
-        $queueContext->bootstrapSchema();
+        $queueContext->getSchemaManager()->bootstrap();
 
         $queue = new DatabaseQueue($pdo, $configuration);
         $task = new QueueWorkflowTaskFixture();
