@@ -453,6 +453,68 @@ final class RunnerIntegrationTest extends TestCase
         }
     }
 
+    public function testRunSingleFailsStaleRunningTaskWhenMaxRuntimeIsAlreadyExceeded(): void {
+        $pdo = PostgresIntegrationConnection::requirePdo($this);
+        $tableName = PostgresIntegrationConnection::uniqueTableName();
+
+        try {
+            $configuration = new QueueConfiguration($tableName);
+            $schemaManager = new SchemaManager($pdo, $configuration);
+            $schemaManager->bootstrap();
+
+            $task = new RunnerTimeoutTaskFixture();
+            $task->setPayload(['job' => 'stale-timeout']);
+            $record = $task->enqueue($pdo, configuration: $configuration);
+
+            self::assertNotNull($record->taskId);
+
+            $queue = new PostgresQueue($pdo, $configuration);
+            $startedAt = new \DateTimeImmutable('-5 seconds');
+            $this->updateTask(
+                $pdo,
+                $queue,
+                (int) $record->taskId,
+                [
+                    'task_status' => TaskStatus::RUNNING,
+                    'step_status' => StepStatus::RUNNING,
+                    'task_started_at' => $startedAt,
+                    'step_started_at' => $startedAt,
+                    'claimed_at' => $startedAt,
+                    'claimed_by' => 'stale-runner',
+                ],
+            );
+
+            $runner = new Runner(
+                $pdo,
+                $configuration,
+                new RunnerConfiguration('runner-timeout-cleanup-1'),
+            );
+
+            self::assertSame(0, $runner->runSingle());
+
+            $row = $this->fetchTaskRow($pdo, $tableName, (int) $record->taskId);
+
+            self::assertSame(TaskStatus::FAILED->value, $row['task_status']);
+            self::assertSame(StepStatus::FAILED->value, $row['step_status']);
+            self::assertSame('408', $row['last_error_code']);
+            self::assertSame('Step exceeded its configured maximum runtime.', $row['last_error_message']);
+            self::assertNull($row['claimed_at']);
+            self::assertNull($row['claimed_by']);
+            self::assertNotNull($row['task_finished_at']);
+            self::assertNotNull($row['cleanup_at']);
+            self::assertEquals(
+                [
+                    'status' => 'failed',
+                    'meta' => ['timedOut' => true],
+                    'message' => 'Step exceeded its configured maximum runtime.',
+                ],
+                $row['result_json'],
+            );
+        } finally {
+            PostgresIntegrationConnection::dropTableIfExists($pdo, $tableName);
+        }
+    }
+
     public function testRunSingleResolvesConstructorDependenciesFromConfiguredContainer(): void {
         $pdo = PostgresIntegrationConnection::requirePdo($this);
         $tableName = PostgresIntegrationConnection::uniqueTableName();

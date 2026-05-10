@@ -542,7 +542,7 @@ You can configure specific behaviour of your Tasks / Steps by setting PHP Attrib
 | `#[CleanupAfter(...)]` | task | `successful: PT0S`, `unsuccessful: P7D` | How long terminal rows stay in the queue table before cleanup removes them. Successful tasks and unsuccessful tasks are configured separately. |
 | `#[Retries(...)]` | step | `count: 3`, `delay: PT1M` | Maximum retry count and minimum delay before retrying a failed step. |
 | `#[RetryMode(...)]` | step | `fail` | `restart` requeues the same failed step while the other modes end in a terminal failure. |
-| `#[MaxRuntime(...)]` | task, step | `PT1H` | Maximum allowed runtime for one step attempt. The runner fails the step if the claim has exceeded the configured deadline before or after execution. |
+| `#[MaxRuntime(...)]` | task, step | `PT1H` | Maximum allowed runtime for one step attempt. This is a best-effort deadline: the runner marks overdue steps as failed before or after execution, and cleanup ticks can also fail stale running claims. It does not interrupt PHP while a step is executing; the running process keeps running until the step returns or throws. |
 
 Example:
 
@@ -571,6 +571,8 @@ final class CallRemoteApiStep extends Step {
 
 Use a shorter or longer `DateInterval` when a failing dependency should only be retried after some backoff, for example while waiting for an external service to recover.
 ```
+
+`MaxRuntime` is not a hard kill switch. If a step is already running when it crosses the deadline, the worker process is not interrupted mid-call. Another runner can mark that claim as failed on a later cleanup tick, and the still-running worker may still write a later state update when it eventually returns.
 
 ## Logging
 

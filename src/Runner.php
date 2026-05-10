@@ -30,6 +30,8 @@ use Psr\Log\NullLogger;
  * (c) Alexander Schenkel <info@alexi.ch>
  */
 class Runner {
+    private const MAX_RUNTIME_EXCEEDED_MESSAGE = 'Step exceeded its configured maximum runtime.';
+
     private \PDO $connection;
     private QueueConfiguration $queueConfiguration;
     private RunnerConfiguration $runnerConfiguration;
@@ -63,7 +65,7 @@ class Runner {
             'runnerId' => $this->runnerConfiguration->getRunnerId(),
         ]);
         $this->bootstrapSchemaIfConfigured();
-        $this->queue->deleteExpired();
+        $this->cleanupExpiredQueueRecords();
 
         $processed = 0;
 
@@ -98,7 +100,7 @@ class Runner {
         $this->ensureNotificationListener();
 
         while (true) {
-            $this->queue->deleteExpired();
+            $this->cleanupExpiredQueueRecords();
 
             $record = $this->queue->claim($this->runnerConfiguration->getRunnerId());
 
@@ -381,6 +383,95 @@ class Runner {
         }
     }
 
+    private function cleanupExpiredQueueRecords(): void {
+        $this->failExpiredRunningTasks();
+        $this->queue->deleteExpired();
+    }
+
+    private function failExpiredRunningTasks(): int {
+        $this->connection->beginTransaction();
+
+        try {
+            $statement = $this->connection->prepare(
+                sprintf(
+                    <<<'SQL'
+SELECT *
+FROM %s
+WHERE task_status = :task_status
+  AND step_status = :step_status
+  AND step_started_at IS NOT NULL
+FOR UPDATE SKIP LOCKED
+SQL,
+                    $this->quotedQueueTableName(),
+                ),
+            );
+            $statement->execute([
+                'task_status' => TaskStatus::RUNNING->value,
+                'step_status' => StepStatus::RUNNING->value,
+            ]);
+
+            $timedOutClaims = 0;
+
+            while (true) {
+                $row = $statement->fetch(\PDO::FETCH_ASSOC);
+
+                if (!is_array($row)) {
+                    break;
+                }
+
+                $record = QueueRecord::fromDatabaseRow($row);
+
+                if ($record->taskId === null || $record->stepClass === null) {
+                    continue;
+                }
+
+                try {
+                    $taskMetadata = $this->metadataResolver->resolveTaskMetadata($record->taskClass);
+                    $stepMetadata = $this->metadataResolver->resolveStepMetadata($record->stepClass, $taskMetadata);
+                } catch (\Throwable $throwable) {
+                    $this->logger->error('Runner failed to resolve metadata for running task cleanup.', [
+                        'runnerId' => $this->runnerConfiguration->getRunnerId(),
+                        'taskId' => $record->taskId,
+                        'taskClass' => $record->taskClass,
+                        'stepClass' => $record->stepClass,
+                        'exceptionClass' => $throwable::class,
+                        'errorCode' => (int) $throwable->getCode(),
+                    ]);
+
+                    continue;
+                }
+
+                if (!$this->hasExceededMaxRuntime($record, $stepMetadata->getMaxRuntime())) {
+                    continue;
+                }
+
+                $this->logger->warning('Runner marked timed out running task as failed during cleanup.', [
+                    'runnerId' => $this->runnerConfiguration->getRunnerId(),
+                    'taskId' => $record->taskId,
+                    'taskClass' => $record->taskClass,
+                    'stepClass' => $record->stepClass,
+                ]);
+
+                $this->queue->update(
+                    $record->taskId,
+                    $this->changesForExpiredRunningTask($taskMetadata),
+                    true,
+                );
+                $timedOutClaims++;
+            }
+
+            $this->connection->commit();
+
+            return $timedOutClaims;
+        } catch (\Throwable $throwable) {
+            if ($this->connection->inTransaction()) {
+                $this->connection->rollBack();
+            }
+
+            throw $throwable;
+        }
+    }
+
     private function resolveExecutionResult(
         QueueRecord $record,
         Task $task,
@@ -413,9 +504,9 @@ class Runner {
             ]);
 
             return StepResult::failed(
-                errorInfo: new ErrorInfo(408, 'Step exceeded its configured maximum runtime.'),
+                errorInfo: new ErrorInfo(408, self::MAX_RUNTIME_EXCEEDED_MESSAGE),
                 meta: ['timedOut' => true],
-                message: 'Step exceeded its configured maximum runtime.',
+                message: self::MAX_RUNTIME_EXCEEDED_MESSAGE,
             );
         }
 
@@ -432,10 +523,10 @@ class Runner {
             return StepResult::failed(
                 errorInfo: new ErrorInfo(
                     408,
-                    'Step exceeded its configured maximum runtime.',
+                    self::MAX_RUNTIME_EXCEEDED_MESSAGE,
                 ),
                 meta: ['timedOut' => true],
-                message: 'Step exceeded its configured maximum runtime.',
+                message: self::MAX_RUNTIME_EXCEEDED_MESSAGE,
             );
         }
 
@@ -669,6 +760,32 @@ class Runner {
         ];
     }
 
+    /**
+     * @return array<string, mixed>
+     */
+    private function changesForExpiredRunningTask(\ByLexus\TaskRunner\Metadata\TaskMetadata $taskMetadata): array {
+        $now = new \DateTimeImmutable('now', new \DateTimeZone('UTC'));
+        $errorInfo = new ErrorInfo(408, self::MAX_RUNTIME_EXCEEDED_MESSAGE);
+
+        return [
+            'task_status' => TaskStatus::FAILED,
+            'step_status' => StepStatus::FAILED,
+            'task_finished_at' => $now,
+            'step_finished_at' => $now,
+            'cleanup_at' => $now->add($taskMetadata->getUnsuccessfulCleanupAfter()),
+            'result_json' => [
+                'status' => StepStatus::FAILED->value,
+                'meta' => ['timedOut' => true],
+                'message' => self::MAX_RUNTIME_EXCEEDED_MESSAGE,
+            ],
+            'error_json' => $this->normalizeErrorInfo($errorInfo),
+            'last_error_code' => (string) $errorInfo->getCode(),
+            'last_error_message' => $errorInfo->getMessage(),
+            'claimed_at' => null,
+            'claimed_by' => null,
+        ];
+    }
+
     private function resolveCleanupAfterInterval(QueueRecord $record): \DateInterval {
         try {
             return $this->metadataResolver->resolveTaskMetadata($record->taskClass)->getUnsuccessfulCleanupAfter();
@@ -697,5 +814,21 @@ class Runner {
         $now = new \DateTimeImmutable('now', new \DateTimeZone('UTC'));
 
         return $now > $deadline;
+    }
+
+    private function quotedQueueTableName(): string {
+        if ($this->queueConfiguration->getSchemaName() === null) {
+            return $this->quotedIdentifier($this->queueConfiguration->getTableName());
+        }
+
+        return sprintf(
+            '%s.%s',
+            $this->quotedIdentifier($this->queueConfiguration->getSchemaName()),
+            $this->quotedIdentifier($this->queueConfiguration->getTableName()),
+        );
+    }
+
+    private function quotedIdentifier(string $identifier): string {
+        return '"' . str_replace('"', '""', $identifier) . '"';
     }
 }
