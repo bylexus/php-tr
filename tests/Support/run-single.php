@@ -2,20 +2,14 @@
 
 declare(strict_types=1);
 
+use ByLexus\TaskRunner\Tests\Support\DatabaseIntegrationConnection;
 use ByLexus\TaskRunner\Queue\QueueConfiguration;
 use ByLexus\TaskRunner\Runner;
 use ByLexus\TaskRunner\RunnerConfiguration;
 
 require dirname(__DIR__, 2) . '/vendor/autoload.php';
 
-$dsn = getenv('TEST_DATABASE_DSN') ?: null;
-$user = getenv('TEST_DATABASE_USER') ?: null;
-$password = getenv('TEST_DATABASE_PASSWORD') ?: null;
-
-if ($dsn === null || $user === null || $password === null) {
-    fwrite(STDERR, "Missing PostgreSQL test environment variables.\n");
-    exit(1);
-}
+$profile = getenv('PHP_TR_TEST_DB_PROFILE') ?: null;
 
 $tableName = $argv[1] ?? null;
 $markerPath = $argv[2] ?? null;
@@ -25,17 +19,17 @@ if ($tableName === null || $markerPath === null) {
     exit(1);
 }
 
-$options = [
-    PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-    PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-];
+if ($profile === null) {
+    fwrite(STDERR, "Missing PHP_TR_TEST_DB_PROFILE.\n");
+    exit(1);
+}
 
-$pgsqlPdoClass = 'Pdo\\Pgsql';
+DatabaseIntegrationConnection::activateProfile($profile);
+$pdo = DatabaseIntegrationConnection::createPdo();
 
-if (class_exists($pgsqlPdoClass)) {
-    $pdo = new $pgsqlPdoClass($dsn, $user, $password, $options);
-} else {
-    $pdo = new PDO($dsn, $user, $password, $options);
+if (!$pdo instanceof PDO) {
+    fwrite(STDERR, "Missing configured database connection environment variables.\n");
+    exit(1);
 }
 
 $runner = new Runner(

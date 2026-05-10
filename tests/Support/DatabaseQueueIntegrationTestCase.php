@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace ByLexus\TaskRunner\Tests\Integration;
+namespace ByLexus\TaskRunner\Tests\Support;
 
 use ByLexus\TaskRunner\Enum\StepStatus;
 use ByLexus\TaskRunner\Enum\TaskStatus;
@@ -15,15 +15,14 @@ use ByLexus\TaskRunner\Queue\QueueRecord;
 use ByLexus\TaskRunner\Queue\SchemaManager;
 use ByLexus\TaskRunner\Task;
 use ByLexus\TaskRunner\Tests\Fixture\QueueWorkflowTaskFixture;
-use ByLexus\TaskRunner\Tests\Support\PostgresIntegrationConnection;
-use PHPUnit\Framework\TestCase;
 
-final class DatabaseQueueIntegrationTest extends TestCase
+abstract class DatabaseQueueIntegrationTestCase extends AbstractDatabaseIntegrationTestCase
 {
     public function testEnqueueCreatesQueuedRecordAndEmitsNotification(): void {
-        $pdo = PostgresIntegrationConnection::requirePdo($this);
-        $listener = PostgresIntegrationConnection::requirePdo($this);
-        $tableName = PostgresIntegrationConnection::uniqueTableName();
+        $pdo = DatabaseIntegrationConnection::requirePdo($this);
+        DatabaseIntegrationConnection::requireNotificationSupport($this, $pdo);
+        $listener = DatabaseIntegrationConnection::requirePdo($this);
+        $tableName = DatabaseIntegrationConnection::uniqueTableName();
 
         try {
             $configuration = new QueueConfiguration($tableName);
@@ -48,14 +47,14 @@ final class DatabaseQueueIntegrationTest extends TestCase
             self::assertIsArray($notification);
             self::assertSame($queue->getNotificationChannel(), $notification['message']);
         } finally {
-            PostgresIntegrationConnection::dropTableIfExists($pdo, $tableName);
+            DatabaseIntegrationConnection::dropTableIfExists($pdo, $tableName);
         }
     }
 
     public function testClaimReturnsAtMostOneRecordAcrossConnections(): void {
-        $pdo = PostgresIntegrationConnection::requirePdo($this);
-        $otherPdo = PostgresIntegrationConnection::requirePdo($this);
-        $tableName = PostgresIntegrationConnection::uniqueTableName();
+        $pdo = DatabaseIntegrationConnection::requirePdo($this);
+        $otherPdo = DatabaseIntegrationConnection::requirePdo($this);
+        $tableName = DatabaseIntegrationConnection::uniqueTableName();
 
         try {
             $configuration = new QueueConfiguration($tableName);
@@ -83,15 +82,17 @@ final class DatabaseQueueIntegrationTest extends TestCase
             self::assertInstanceOf(QueueWorkflowTaskFixture::class, $task);
             self::assertEquals((object) ['job' => 'beta'], $task->getPayload());
         } finally {
-            PostgresIntegrationConnection::dropTableIfExists($pdo, $tableName);
+            DatabaseIntegrationConnection::dropTableIfExists($pdo, $tableName);
         }
     }
 
     public function testEnqueueUsesConfiguredSchemaAndSchemaAwareNotificationChannel(): void {
-        $pdo = PostgresIntegrationConnection::requirePdo($this);
-        $listener = PostgresIntegrationConnection::requirePdo($this);
-        $tableName = PostgresIntegrationConnection::uniqueTableName();
-        $schemaName = PostgresIntegrationConnection::uniqueSchemaName();
+        $pdo = DatabaseIntegrationConnection::requirePdo($this);
+        DatabaseIntegrationConnection::requireNotificationSupport($this, $pdo);
+        DatabaseIntegrationConnection::requireSchemaSupport($this, $pdo);
+        $listener = DatabaseIntegrationConnection::requirePdo($this);
+        $tableName = DatabaseIntegrationConnection::uniqueTableName();
+        $schemaName = DatabaseIntegrationConnection::uniqueSchemaName();
 
         try {
             $configuration = new QueueConfiguration($tableName, $schemaName);
@@ -117,13 +118,13 @@ final class DatabaseQueueIntegrationTest extends TestCase
                 $this->fetchQueueRecord($pdo, $tableName, (int) $record->taskId, $schemaName)->payload,
             );
         } finally {
-            PostgresIntegrationConnection::dropSchemaIfExists($pdo, $schemaName);
+            DatabaseIntegrationConnection::dropSchemaIfExists($pdo, $schemaName);
         }
     }
 
     public function testClaimPrefersHigherPriorityTasks(): void {
-        $pdo = PostgresIntegrationConnection::requirePdo($this);
-        $tableName = PostgresIntegrationConnection::uniqueTableName();
+        $pdo = DatabaseIntegrationConnection::requirePdo($this);
+        $tableName = DatabaseIntegrationConnection::uniqueTableName();
 
         try {
             $configuration = new QueueConfiguration($tableName);
@@ -150,13 +151,13 @@ final class DatabaseQueueIntegrationTest extends TestCase
             self::assertEquals((object) ['job' => 'high'], $firstClaim->payload);
             self::assertEquals((object) ['job' => 'low'], $secondClaim->payload);
         } finally {
-            PostgresIntegrationConnection::dropTableIfExists($pdo, $tableName);
+            DatabaseIntegrationConnection::dropTableIfExists($pdo, $tableName);
         }
     }
 
     public function testEnqueueNormalizesMissingPayloadToObject(): void {
-        $pdo = PostgresIntegrationConnection::requirePdo($this);
-        $tableName = PostgresIntegrationConnection::uniqueTableName();
+        $pdo = DatabaseIntegrationConnection::requirePdo($this);
+        $tableName = DatabaseIntegrationConnection::uniqueTableName();
 
         try {
             $configuration = new QueueConfiguration($tableName);
@@ -177,13 +178,13 @@ final class DatabaseQueueIntegrationTest extends TestCase
                 $rehydratedTask->actualStep(),
             );
         } finally {
-            PostgresIntegrationConnection::dropTableIfExists($pdo, $tableName);
+            DatabaseIntegrationConnection::dropTableIfExists($pdo, $tableName);
         }
     }
 
     public function testEnqueueStoresAttachmentMetadataAndHydratesAttachmentFromBlobStore(): void {
-        $pdo = PostgresIntegrationConnection::requirePdo($this);
-        $tableName = PostgresIntegrationConnection::uniqueTableName();
+        $pdo = DatabaseIntegrationConnection::requirePdo($this);
+        $tableName = DatabaseIntegrationConnection::uniqueTableName();
         $sourcePath = tempnam(sys_get_temp_dir(), 'durable-attachment-source-');
 
         self::assertIsString($sourcePath);
@@ -219,13 +220,13 @@ final class DatabaseQueueIntegrationTest extends TestCase
             self::assertSame('blob-backed attachment', $attachment->contents());
         } finally {
             @unlink($sourcePath);
-            PostgresIntegrationConnection::dropTableIfExists($pdo, $tableName);
+            DatabaseIntegrationConnection::dropTableIfExists($pdo, $tableName);
         }
     }
 
     public function testAttachmentRoundtripSupportsNestedObjectsAndArrays(): void {
-        $pdo = PostgresIntegrationConnection::requirePdo($this);
-        $tableName = PostgresIntegrationConnection::uniqueTableName();
+        $pdo = DatabaseIntegrationConnection::requirePdo($this);
+        $tableName = DatabaseIntegrationConnection::uniqueTableName();
         $primaryPath = tempnam(sys_get_temp_dir(), 'durable-attachment-primary-');
         $secondaryPath = tempnam(sys_get_temp_dir(), 'durable-attachment-secondary-');
 
@@ -269,13 +270,13 @@ final class DatabaseQueueIntegrationTest extends TestCase
         } finally {
             @unlink($primaryPath);
             @unlink($secondaryPath);
-            PostgresIntegrationConnection::dropTableIfExists($pdo, $tableName);
+            DatabaseIntegrationConnection::dropTableIfExists($pdo, $tableName);
         }
     }
 
     public function testSharedAttachmentInstanceIsStoredOnlyOnce(): void {
-        $pdo = PostgresIntegrationConnection::requirePdo($this);
-        $tableName = PostgresIntegrationConnection::uniqueTableName();
+        $pdo = DatabaseIntegrationConnection::requirePdo($this);
+        $tableName = DatabaseIntegrationConnection::uniqueTableName();
         $sourcePath = tempnam(sys_get_temp_dir(), 'durable-attachment-shared-');
 
         self::assertIsString($sourcePath);
@@ -304,13 +305,13 @@ final class DatabaseQueueIntegrationTest extends TestCase
             );
         } finally {
             @unlink($sourcePath);
-            PostgresIntegrationConnection::dropTableIfExists($pdo, $tableName);
+            DatabaseIntegrationConnection::dropTableIfExists($pdo, $tableName);
         }
     }
 
     public function testDeleteExpiredAlsoDeletesAttachmentBlobRowsThroughCascade(): void {
-        $pdo = PostgresIntegrationConnection::requirePdo($this);
-        $tableName = PostgresIntegrationConnection::uniqueTableName();
+        $pdo = DatabaseIntegrationConnection::requirePdo($this);
+        $tableName = DatabaseIntegrationConnection::uniqueTableName();
         $sourcePath = tempnam(sys_get_temp_dir(), 'durable-attachment-expired-');
 
         self::assertIsString($sourcePath);
@@ -349,13 +350,13 @@ final class DatabaseQueueIntegrationTest extends TestCase
             self::assertSame(0, $this->blobCountForTask($pdo, $configuration, (int) $record->taskId));
         } finally {
             @unlink($sourcePath);
-            PostgresIntegrationConnection::dropTableIfExists($pdo, $tableName);
+            DatabaseIntegrationConnection::dropTableIfExists($pdo, $tableName);
         }
     }
 
     public function testDeleteExpiredRemovesOnlyExpiredTerminalRows(): void {
-        $pdo = PostgresIntegrationConnection::requirePdo($this);
-        $tableName = PostgresIntegrationConnection::uniqueTableName();
+        $pdo = DatabaseIntegrationConnection::requirePdo($this);
+        $tableName = DatabaseIntegrationConnection::uniqueTableName();
 
         try {
             $configuration = new QueueConfiguration($tableName);
@@ -412,14 +413,22 @@ final class DatabaseQueueIntegrationTest extends TestCase
             self::assertTrue($this->taskExists($pdo, $tableName, $futureTaskId));
             self::assertTrue($this->taskExists($pdo, $tableName, $queuedTaskId));
         } finally {
-            PostgresIntegrationConnection::dropTableIfExists($pdo, $tableName);
+            DatabaseIntegrationConnection::dropTableIfExists($pdo, $tableName);
         }
     }
 
     public function testUpdateKeepsRowLockedUntilOuterTransactionEnds(): void {
-        $pdo = PostgresIntegrationConnection::requirePdo($this);
-        $otherPdo = PostgresIntegrationConnection::requirePdo($this);
-        $tableName = PostgresIntegrationConnection::uniqueTableName();
+        $pdo = DatabaseIntegrationConnection::requirePdo($this);
+        $platform = DatabaseIntegrationConnection::platform($pdo);
+
+        if (!$platform->supportsForUpdate() || !$platform->supportsSkipLocked()) {
+            $this->markTestSkipped(
+                sprintf('%s does not support the row locking required by this test.', $platform->getName()),
+            );
+        }
+
+        $otherPdo = DatabaseIntegrationConnection::requirePdo($this);
+        $tableName = DatabaseIntegrationConnection::uniqueTableName();
 
         try {
             $configuration = new QueueConfiguration($tableName);
@@ -448,13 +457,13 @@ final class DatabaseQueueIntegrationTest extends TestCase
                 $otherPdo->rollBack();
             }
 
-            PostgresIntegrationConnection::dropTableIfExists($pdo, $tableName);
+            DatabaseIntegrationConnection::dropTableIfExists($pdo, $tableName);
         }
     }
 
     public function testUpdateRequiresActiveTransaction(): void {
-        $pdo = PostgresIntegrationConnection::requirePdo($this);
-        $tableName = PostgresIntegrationConnection::uniqueTableName();
+        $pdo = DatabaseIntegrationConnection::requirePdo($this);
+        $tableName = DatabaseIntegrationConnection::uniqueTableName();
 
         try {
             $configuration = new QueueConfiguration($tableName);
@@ -475,7 +484,7 @@ final class DatabaseQueueIntegrationTest extends TestCase
                 $pdo->rollBack();
             }
 
-            PostgresIntegrationConnection::dropTableIfExists($pdo, $tableName);
+            DatabaseIntegrationConnection::dropTableIfExists($pdo, $tableName);
         }
     }
 
@@ -510,7 +519,10 @@ final class DatabaseQueueIntegrationTest extends TestCase
 
     private function taskExists(\PDO $pdo, string $tableName, int $taskId): bool {
         $statement = $pdo->prepare(
-            sprintf('SELECT EXISTS (SELECT 1 FROM "%s" WHERE task_id = :task_id)', str_replace('"', '""', $tableName)),
+            sprintf(
+                'SELECT EXISTS (SELECT 1 FROM %s WHERE task_id = :task_id)',
+                $this->qualifiedIdentifier($pdo, null, $tableName),
+            ),
         );
         $statement->execute(['task_id' => $taskId]);
 
@@ -520,7 +532,7 @@ final class DatabaseQueueIntegrationTest extends TestCase
     /** @return array<string, mixed> */
     private function fetchTaskRow(\PDO $pdo, string $tableName, int $taskId): array {
         $statement = $pdo->prepare(
-            sprintf('SELECT * FROM "%s" WHERE task_id = :task_id', str_replace('"', '""', $tableName)),
+            sprintf('SELECT * FROM %s WHERE task_id = :task_id', $this->qualifiedIdentifier($pdo, null, $tableName)),
         );
         $statement->execute(['task_id' => $taskId]);
         $row = $statement->fetch(\PDO::FETCH_ASSOC);
@@ -543,7 +555,10 @@ final class DatabaseQueueIntegrationTest extends TestCase
         ?string $schemaName = null,
     ): QueueRecord {
         $statement = $pdo->prepare(
-            sprintf('SELECT * FROM %s WHERE task_id = :task_id', $this->qualifiedIdentifier($schemaName, $tableName)),
+            sprintf(
+                'SELECT * FROM %s WHERE task_id = :task_id',
+                $this->qualifiedIdentifier($pdo, $schemaName, $tableName),
+            ),
         );
         $statement->execute(['task_id' => $taskId]);
         $row = $statement->fetch(\PDO::FETCH_ASSOC);
@@ -557,7 +572,7 @@ final class DatabaseQueueIntegrationTest extends TestCase
         $statement = $pdo->prepare(
             sprintf(
                 'SELECT COUNT(*) FROM %s WHERE task_id = :task_id',
-                $this->qualifiedIdentifier($configuration->getSchemaName(), $configuration->getBlobTableName()),
+                $this->qualifiedIdentifier($pdo, $configuration->getSchemaName(), $configuration->getBlobTableName()),
             ),
         );
         $statement->execute(['task_id' => $taskId]);
@@ -593,8 +608,8 @@ final class DatabaseQueueIntegrationTest extends TestCase
         try {
             $statement = $pdo->prepare(
                 sprintf(
-                    'SELECT task_id FROM "%s" WHERE task_id = :task_id FOR UPDATE SKIP LOCKED',
-                    str_replace('"', '""', $tableName),
+                    'SELECT task_id FROM %s WHERE task_id = :task_id FOR UPDATE SKIP LOCKED',
+                    $this->qualifiedIdentifier($pdo, null, $tableName),
                 ),
             );
             $statement->execute(['task_id' => $taskId]);
@@ -612,13 +627,7 @@ final class DatabaseQueueIntegrationTest extends TestCase
         }
     }
 
-    private function qualifiedIdentifier(?string $schemaName, string $identifier): string {
-        $quotedIdentifier = '"' . str_replace('"', '""', $identifier) . '"';
-
-        if ($schemaName === null) {
-            return $quotedIdentifier;
-        }
-
-        return sprintf('"%s".%s', str_replace('"', '""', $schemaName), $quotedIdentifier);
+    private function qualifiedIdentifier(\PDO $pdo, ?string $schemaName, string $identifier): string {
+        return DatabaseIntegrationConnection::platform($pdo)->qualifyIdentifier($schemaName, $identifier);
     }
 }

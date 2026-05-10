@@ -2,20 +2,14 @@
 
 declare(strict_types=1);
 
+use ByLexus\TaskRunner\Tests\Support\DatabaseIntegrationConnection;
 use ByLexus\TaskRunner\Queue\QueueConfiguration;
 use ByLexus\TaskRunner\Runner;
 use ByLexus\TaskRunner\RunnerConfiguration;
 
 require dirname(__DIR__, 2) . '/vendor/autoload.php';
 
-$dsn = getenv('TEST_DATABASE_DSN') ?: null;
-$user = getenv('TEST_DATABASE_USER') ?: null;
-$password = getenv('TEST_DATABASE_PASSWORD') ?: null;
-
-if ($dsn === null || $user === null || $password === null) {
-    fwrite(STDERR, "Missing PostgreSQL test environment variables.\n");
-    exit(1);
-}
+$profile = getenv('PHP_TR_TEST_DB_PROFILE') ?: null;
 
 $tableName = $argv[1] ?? null;
 $markerPath = $argv[2] ?? null;
@@ -24,23 +18,26 @@ $timeoutSeconds = isset($argv[4]) ? (int) $argv[4] : 1;
 $readyPath = $argv[5] ?? null;
 
 if ($tableName === null || $markerPath === null) {
-    fwrite(STDERR, "Usage: php tests/Support/run-loop.php <table-name> <marker-path> [connection-mode] [timeout-seconds] [ready-path]\n");
+    fwrite(
+        STDERR,
+        "Usage: php tests/Support/run-loop.php <table-name> <marker-path> "
+        . "[connection-mode] [timeout-seconds] [ready-path]\n",
+    );
     exit(1);
 }
 
-$options = [
-    PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-    PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-];
+if ($profile === null) {
+    fwrite(STDERR, "Missing PHP_TR_TEST_DB_PROFILE.\n");
+    exit(1);
+}
 
-$pgsqlPdoClass = 'Pdo\\Pgsql';
-$pdo = match ($connectionMode) {
-    'plain-pdo' => new PDO($dsn, $user, $password, $options),
-    'pdo-pgsql' => new $pgsqlPdoClass($dsn, $user, $password, $options),
-    default => class_exists($pgsqlPdoClass)
-        ? new $pgsqlPdoClass($dsn, $user, $password, $options)
-        : new PDO($dsn, $user, $password, $options),
-};
+DatabaseIntegrationConnection::activateProfile($profile);
+$pdo = DatabaseIntegrationConnection::createPdo();
+
+if (!$pdo instanceof PDO) {
+    fwrite(STDERR, "Missing configured database connection environment variables.\n");
+    exit(1);
+}
 
 $runner = new Runner(
     $pdo,

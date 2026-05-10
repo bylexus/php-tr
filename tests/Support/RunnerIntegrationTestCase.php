@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace ByLexus\TaskRunner\Tests\Integration;
+namespace ByLexus\TaskRunner\Tests\Support;
 
 use ByLexus\TaskRunner\Enum\StepStatus;
 use ByLexus\TaskRunner\Enum\TaskStatus;
@@ -29,16 +29,11 @@ use ByLexus\TaskRunner\Tests\Fixture\RunnerTimeoutTaskFixture;
 use ByLexus\TaskRunner\Tests\Fixture\QueueWorkflowTaskFixture;
 use ByLexus\TaskRunner\Tests\Fixture\ServiceAndLoggerInjectedTaskFixture;
 use ByLexus\TaskRunner\Tests\Fixture\StepInjectedOnlyTaskFixture;
-use ByLexus\TaskRunner\Tests\Support\PostgresIntegrationConnection;
-use ByLexus\TaskRunner\Tests\Support\InMemoryContainer;
-use ByLexus\TaskRunner\Tests\Support\SpyLogger;
-use PHPUnit\Framework\TestCase;
-
-final class RunnerIntegrationTest extends TestCase
+abstract class RunnerIntegrationTestCase extends AbstractDatabaseIntegrationTestCase
 {
     public function testRunSingleMarksTaskFailedWhenNextStepThrows(): void {
-        $pdo = PostgresIntegrationConnection::requirePdo($this);
-        $tableName = PostgresIntegrationConnection::uniqueTableName();
+        $pdo = DatabaseIntegrationConnection::requirePdo($this);
+        $tableName = DatabaseIntegrationConnection::uniqueTableName();
 
         try {
             $configuration = new QueueConfiguration($tableName);
@@ -67,13 +62,13 @@ final class RunnerIntegrationTest extends TestCase
             self::assertSame('failed', $row['result_json']['status']);
             self::assertSame(true, $row['result_json']['meta']['nextStepFailed']);
         } finally {
-            PostgresIntegrationConnection::dropTableIfExists($pdo, $tableName);
+            DatabaseIntegrationConnection::dropTableIfExists($pdo, $tableName);
         }
     }
 
     public function testRunSingleHydratesAttachmentPayloadsForStepExecution(): void {
-        $pdo = PostgresIntegrationConnection::requirePdo($this);
-        $tableName = PostgresIntegrationConnection::uniqueTableName();
+        $pdo = DatabaseIntegrationConnection::requirePdo($this);
+        $tableName = DatabaseIntegrationConnection::uniqueTableName();
         $sourcePath = tempnam(sys_get_temp_dir(), 'durable-attachment-runner-');
 
         self::assertIsString($sourcePath);
@@ -106,13 +101,13 @@ final class RunnerIntegrationTest extends TestCase
             self::assertSame('file_attachment', $row['payload_json']['attachment']['__php_tr_type']);
         } finally {
             @unlink($sourcePath);
-            PostgresIntegrationConnection::dropTableIfExists($pdo, $tableName);
+            DatabaseIntegrationConnection::dropTableIfExists($pdo, $tableName);
         }
     }
 
     public function testRunSingleProcessesQueuedTaskToTerminalSuccess(): void {
-        $pdo = PostgresIntegrationConnection::requirePdo($this);
-        $tableName = PostgresIntegrationConnection::uniqueTableName();
+        $pdo = DatabaseIntegrationConnection::requirePdo($this);
+        $tableName = DatabaseIntegrationConnection::uniqueTableName();
 
         try {
             $configuration = new QueueConfiguration($tableName);
@@ -147,13 +142,13 @@ final class RunnerIntegrationTest extends TestCase
             self::assertNotNull($row['task_finished_at']);
             self::assertNotNull($row['cleanup_at']);
         } finally {
-            PostgresIntegrationConnection::dropTableIfExists($pdo, $tableName);
+            DatabaseIntegrationConnection::dropTableIfExists($pdo, $tableName);
         }
     }
 
     public function testRunSingleEmitsLifecycleAndQueueLogsToConfiguredLogger(): void {
-        $pdo = PostgresIntegrationConnection::requirePdo($this);
-        $tableName = PostgresIntegrationConnection::uniqueTableName();
+        $pdo = DatabaseIntegrationConnection::requirePdo($this);
+        $tableName = DatabaseIntegrationConnection::uniqueTableName();
 
         try {
             $configuration = new QueueConfiguration($tableName);
@@ -196,13 +191,13 @@ final class RunnerIntegrationTest extends TestCase
                 $stepUpdatedRecord['context']['stepClass'] ?? null,
             );
         } finally {
-            PostgresIntegrationConnection::dropTableIfExists($pdo, $tableName);
+            DatabaseIntegrationConnection::dropTableIfExists($pdo, $tableName);
         }
     }
 
     public function testRunSingleCanBootstrapSchemaWhenConfigured(): void {
-        $pdo = PostgresIntegrationConnection::requirePdo($this);
-        $tableName = PostgresIntegrationConnection::uniqueTableName();
+        $pdo = DatabaseIntegrationConnection::requirePdo($this);
+        $tableName = DatabaseIntegrationConnection::uniqueTableName();
 
         try {
             $configuration = new QueueConfiguration($tableName);
@@ -219,13 +214,13 @@ final class RunnerIntegrationTest extends TestCase
             self::assertSame(0, $runner->runSingle());
             self::assertTrue($schemaManager->tableExists());
         } finally {
-            PostgresIntegrationConnection::dropTableIfExists($pdo, $tableName);
+            DatabaseIntegrationConnection::dropTableIfExists($pdo, $tableName);
         }
     }
 
     public function testRunSinglePersistsNullPayloadOnThrownFailure(): void {
-        $pdo = PostgresIntegrationConnection::requirePdo($this);
-        $tableName = PostgresIntegrationConnection::uniqueTableName();
+        $pdo = DatabaseIntegrationConnection::requirePdo($this);
+        $tableName = DatabaseIntegrationConnection::uniqueTableName();
 
         try {
             $configuration = new QueueConfiguration($tableName);
@@ -253,13 +248,13 @@ final class RunnerIntegrationTest extends TestCase
             self::assertSame(['to' => 'alex@example.com', 'from' => 'chuck@example.com'], $row['payload_json']);
             self::assertSame('Step exploded.', $row['last_error_message']);
         } finally {
-            PostgresIntegrationConnection::dropTableIfExists($pdo, $tableName);
+            DatabaseIntegrationConnection::dropTableIfExists($pdo, $tableName);
         }
     }
 
     public function testRunSingleDrainsQueuedFollowUpStepsWhileKeepingExistingPayload(): void {
-        $pdo = PostgresIntegrationConnection::requirePdo($this);
-        $tableName = PostgresIntegrationConnection::uniqueTableName();
+        $pdo = DatabaseIntegrationConnection::requirePdo($this);
+        $tableName = DatabaseIntegrationConnection::uniqueTableName();
 
         try {
             $configuration = new QueueConfiguration($tableName);
@@ -290,13 +285,13 @@ final class RunnerIntegrationTest extends TestCase
                 $row['result_json'],
             );
         } finally {
-            PostgresIntegrationConnection::dropTableIfExists($pdo, $tableName);
+            DatabaseIntegrationConnection::dropTableIfExists($pdo, $tableName);
         }
     }
 
     public function testRunSinglePersistsMaterializedPayloadObjectsFromNullRootPayload(): void {
-        $pdo = PostgresIntegrationConnection::requirePdo($this);
-        $tableName = PostgresIntegrationConnection::uniqueTableName();
+        $pdo = DatabaseIntegrationConnection::requirePdo($this);
+        $tableName = DatabaseIntegrationConnection::uniqueTableName();
 
         try {
             $configuration = new QueueConfiguration($tableName);
@@ -327,13 +322,13 @@ final class RunnerIntegrationTest extends TestCase
             self::assertSame('somevalue', $rehydratedTask->getPayload('details')->bar);
             self::assertSame('somevalue', $rehydratedTask->getPayload()->details->bar);
         } finally {
-            PostgresIntegrationConnection::dropTableIfExists($pdo, $tableName);
+            DatabaseIntegrationConnection::dropTableIfExists($pdo, $tableName);
         }
     }
 
     public function testRunSingleDeletesExpiredTerminalRowsBeforePolling(): void {
-        $pdo = PostgresIntegrationConnection::requirePdo($this);
-        $tableName = PostgresIntegrationConnection::uniqueTableName();
+        $pdo = DatabaseIntegrationConnection::requirePdo($this);
+        $tableName = DatabaseIntegrationConnection::uniqueTableName();
 
         try {
             $configuration = new QueueConfiguration($tableName);
@@ -370,13 +365,13 @@ final class RunnerIntegrationTest extends TestCase
             self::assertSame(0, $runner->runSingle());
             self::assertFalse($this->taskExists($pdo, $tableName, (int) $record->taskId));
         } finally {
-            PostgresIntegrationConnection::dropTableIfExists($pdo, $tableName);
+            DatabaseIntegrationConnection::dropTableIfExists($pdo, $tableName);
         }
     }
 
     public function testRunSingleDrainsRetryableFailureUntilItSucceeds(): void {
-        $pdo = PostgresIntegrationConnection::requirePdo($this);
-        $tableName = PostgresIntegrationConnection::uniqueTableName();
+        $pdo = DatabaseIntegrationConnection::requirePdo($this);
+        $tableName = DatabaseIntegrationConnection::uniqueTableName();
 
         try {
             $configuration = new QueueConfiguration($tableName);
@@ -407,13 +402,13 @@ final class RunnerIntegrationTest extends TestCase
                 $completedRow['result_json'],
             );
         } finally {
-            PostgresIntegrationConnection::dropTableIfExists($pdo, $tableName);
+            DatabaseIntegrationConnection::dropTableIfExists($pdo, $tableName);
         }
     }
 
     public function testRunSingleFailsTaskWhenMaxRuntimeIsExceeded(): void {
-        $pdo = PostgresIntegrationConnection::requirePdo($this);
-        $tableName = PostgresIntegrationConnection::uniqueTableName();
+        $pdo = DatabaseIntegrationConnection::requirePdo($this);
+        $tableName = DatabaseIntegrationConnection::uniqueTableName();
 
         try {
             $configuration = new QueueConfiguration($tableName);
@@ -449,13 +444,13 @@ final class RunnerIntegrationTest extends TestCase
                 $row['result_json'],
             );
         } finally {
-            PostgresIntegrationConnection::dropTableIfExists($pdo, $tableName);
+            DatabaseIntegrationConnection::dropTableIfExists($pdo, $tableName);
         }
     }
 
     public function testRunSingleFailsStaleRunningTaskWhenMaxRuntimeIsAlreadyExceeded(): void {
-        $pdo = PostgresIntegrationConnection::requirePdo($this);
-        $tableName = PostgresIntegrationConnection::uniqueTableName();
+        $pdo = DatabaseIntegrationConnection::requirePdo($this);
+        $tableName = DatabaseIntegrationConnection::uniqueTableName();
 
         try {
             $configuration = new QueueConfiguration($tableName);
@@ -511,13 +506,13 @@ final class RunnerIntegrationTest extends TestCase
                 $row['result_json'],
             );
         } finally {
-            PostgresIntegrationConnection::dropTableIfExists($pdo, $tableName);
+            DatabaseIntegrationConnection::dropTableIfExists($pdo, $tableName);
         }
     }
 
     public function testRunSingleResolvesConstructorDependenciesFromConfiguredContainer(): void {
-        $pdo = PostgresIntegrationConnection::requirePdo($this);
-        $tableName = PostgresIntegrationConnection::uniqueTableName();
+        $pdo = DatabaseIntegrationConnection::requirePdo($this);
+        $tableName = DatabaseIntegrationConnection::uniqueTableName();
 
         try {
             $configuration = new QueueConfiguration($tableName);
@@ -556,13 +551,13 @@ final class RunnerIntegrationTest extends TestCase
                 $row['result_json'],
             );
         } finally {
-            PostgresIntegrationConnection::dropTableIfExists($pdo, $tableName);
+            DatabaseIntegrationConnection::dropTableIfExists($pdo, $tableName);
         }
     }
 
     public function testRunSingleUsesRunnerLoggerWhenContainerDoesNotProvideLoggerService(): void {
-        $pdo = PostgresIntegrationConnection::requirePdo($this);
-        $tableName = PostgresIntegrationConnection::uniqueTableName();
+        $pdo = DatabaseIntegrationConnection::requirePdo($this);
+        $tableName = DatabaseIntegrationConnection::uniqueTableName();
 
         try {
             $configuration = new QueueConfiguration($tableName);
@@ -611,13 +606,13 @@ final class RunnerIntegrationTest extends TestCase
                 $row['result_json'],
             );
         } finally {
-            PostgresIntegrationConnection::dropTableIfExists($pdo, $tableName);
+            DatabaseIntegrationConnection::dropTableIfExists($pdo, $tableName);
         }
     }
 
     public function testRunSingleFailsClaimedTaskWhenInjectedTaskHasNoConfiguredContainer(): void {
-        $pdo = PostgresIntegrationConnection::requirePdo($this);
-        $tableName = PostgresIntegrationConnection::uniqueTableName();
+        $pdo = DatabaseIntegrationConnection::requirePdo($this);
+        $tableName = DatabaseIntegrationConnection::uniqueTableName();
 
         try {
             $configuration = new QueueConfiguration($tableName);
@@ -657,13 +652,13 @@ final class RunnerIntegrationTest extends TestCase
                 $row['result_json'],
             );
         } finally {
-            PostgresIntegrationConnection::dropTableIfExists($pdo, $tableName);
+            DatabaseIntegrationConnection::dropTableIfExists($pdo, $tableName);
         }
     }
 
     public function testRunSingleFailsClaimedTaskWhenInjectedStepServiceIsMissing(): void {
-        $pdo = PostgresIntegrationConnection::requirePdo($this);
-        $tableName = PostgresIntegrationConnection::uniqueTableName();
+        $pdo = DatabaseIntegrationConnection::requirePdo($this);
+        $tableName = DatabaseIntegrationConnection::uniqueTableName();
 
         try {
             $configuration = new QueueConfiguration($tableName);
@@ -699,13 +694,13 @@ final class RunnerIntegrationTest extends TestCase
             );
             self::assertStringContainsString('ConstructorInjectedStepFixture', (string) $row['last_error_message']);
         } finally {
-            PostgresIntegrationConnection::dropTableIfExists($pdo, $tableName);
+            DatabaseIntegrationConnection::dropTableIfExists($pdo, $tableName);
         }
     }
 
     public function testRunLoopProcessesTasksAndStopsGracefullyOnSigterm(): void {
-        $pdo = PostgresIntegrationConnection::requirePdo($this);
-        $tableName = PostgresIntegrationConnection::uniqueTableName();
+        $pdo = DatabaseIntegrationConnection::requirePdo($this);
+        $tableName = DatabaseIntegrationConnection::uniqueTableName();
         $markerPath = sprintf('%s/%s.stop', sys_get_temp_dir(), $tableName);
         @unlink($markerPath);
 
@@ -729,6 +724,7 @@ final class RunnerIntegrationTest extends TestCase
                 ],
                 $pipes,
                 dirname(__DIR__, 2),
+                $this->processEnvironment(),
             );
 
             self::assertIsResource($process);
@@ -749,13 +745,13 @@ final class RunnerIntegrationTest extends TestCase
             }
         } finally {
             @unlink($markerPath);
-            PostgresIntegrationConnection::dropTableIfExists($pdo, $tableName);
+            DatabaseIntegrationConnection::dropTableIfExists($pdo, $tableName);
         }
     }
 
     public function testRunLoopWaitsForRunningStepBeforeStoppingOnSigterm(): void {
-        $pdo = PostgresIntegrationConnection::requirePdo($this);
-        $tableName = PostgresIntegrationConnection::uniqueTableName();
+        $pdo = DatabaseIntegrationConnection::requirePdo($this);
+        $tableName = DatabaseIntegrationConnection::uniqueTableName();
         $markerPath = sprintf('%s/%s.stop', sys_get_temp_dir(), $tableName);
         $startedPath = sprintf('%s/%s.started', sys_get_temp_dir(), $tableName);
         $releasePath = sprintf('%s/%s.release', sys_get_temp_dir(), $tableName);
@@ -782,13 +778,10 @@ final class RunnerIntegrationTest extends TestCase
                 ],
                 $pipes,
                 dirname(__DIR__, 2),
-                [
-                    'TEST_DATABASE_DSN' => (string) getenv('TEST_DATABASE_DSN'),
-                    'TEST_DATABASE_USER' => (string) getenv('TEST_DATABASE_USER'),
-                    'TEST_DATABASE_PASSWORD' => (string) getenv('TEST_DATABASE_PASSWORD'),
+                array_merge($this->processEnvironment(), [
                     'PHP_TR_SIGNAL_STARTED_PATH' => $startedPath,
                     'PHP_TR_SIGNAL_RELEASE_PATH' => $releasePath,
-                ],
+                ]),
             );
 
             self::assertIsResource($process);
@@ -837,13 +830,13 @@ final class RunnerIntegrationTest extends TestCase
             @unlink($markerPath);
             @unlink($startedPath);
             @unlink($releasePath);
-            PostgresIntegrationConnection::dropTableIfExists($pdo, $tableName);
+            DatabaseIntegrationConnection::dropTableIfExists($pdo, $tableName);
         }
     }
 
     public function testRunSingleWaitsForRunningStepBeforeStoppingOnSigterm(): void {
-        $pdo = PostgresIntegrationConnection::requirePdo($this);
-        $tableName = PostgresIntegrationConnection::uniqueTableName();
+        $pdo = DatabaseIntegrationConnection::requirePdo($this);
+        $tableName = DatabaseIntegrationConnection::uniqueTableName();
         $markerPath = sprintf('%s/%s.stop', sys_get_temp_dir(), $tableName);
         $startedPath = sprintf('%s/%s.started', sys_get_temp_dir(), $tableName);
         $releasePath = sprintf('%s/%s.release', sys_get_temp_dir(), $tableName);
@@ -873,13 +866,10 @@ final class RunnerIntegrationTest extends TestCase
                 ],
                 $pipes,
                 dirname(__DIR__, 2),
-                [
-                    'TEST_DATABASE_DSN' => (string) getenv('TEST_DATABASE_DSN'),
-                    'TEST_DATABASE_USER' => (string) getenv('TEST_DATABASE_USER'),
-                    'TEST_DATABASE_PASSWORD' => (string) getenv('TEST_DATABASE_PASSWORD'),
+                array_merge($this->processEnvironment(), [
                     'PHP_TR_SIGNAL_STARTED_PATH' => $startedPath,
                     'PHP_TR_SIGNAL_RELEASE_PATH' => $releasePath,
-                ],
+                ]),
             );
 
             self::assertIsResource($process);
@@ -949,13 +939,14 @@ final class RunnerIntegrationTest extends TestCase
             @unlink($markerPath);
             @unlink($startedPath);
             @unlink($releasePath);
-            PostgresIntegrationConnection::dropTableIfExists($pdo, $tableName);
+            DatabaseIntegrationConnection::dropTableIfExists($pdo, $tableName);
         }
     }
 
     public function testRunLoopWakesOnNotifyBeforeTimeoutWithPlainPdo(): void {
-        $pdo = PostgresIntegrationConnection::requirePdo($this);
-        $tableName = PostgresIntegrationConnection::uniqueTableName();
+        $pdo = DatabaseIntegrationConnection::requirePdo($this);
+        DatabaseIntegrationConnection::requireNotificationSupport($this, $pdo);
+        $tableName = DatabaseIntegrationConnection::uniqueTableName();
         $markerPath = sprintf('%s/%s.stop', sys_get_temp_dir(), $tableName);
         $readyPath = sprintf('%s/%s.ready', sys_get_temp_dir(), $tableName);
         @unlink($markerPath);
@@ -975,6 +966,7 @@ final class RunnerIntegrationTest extends TestCase
                 ],
                 $pipes,
                 dirname(__DIR__, 2),
+                $this->processEnvironment(),
             );
 
             self::assertIsResource($process);
@@ -1004,13 +996,13 @@ final class RunnerIntegrationTest extends TestCase
         } finally {
             @unlink($readyPath);
             @unlink($markerPath);
-            PostgresIntegrationConnection::dropTableIfExists($pdo, $tableName);
+            DatabaseIntegrationConnection::dropTableIfExists($pdo, $tableName);
         }
     }
 
     public function testRunSingleDrainsRetriesAndFailsTaskWhenTheyAreExhausted(): void {
-        $pdo = PostgresIntegrationConnection::requirePdo($this);
-        $tableName = PostgresIntegrationConnection::uniqueTableName();
+        $pdo = DatabaseIntegrationConnection::requirePdo($this);
+        $tableName = DatabaseIntegrationConnection::uniqueTableName();
 
         try {
             $configuration = new QueueConfiguration($tableName);
@@ -1041,13 +1033,13 @@ final class RunnerIntegrationTest extends TestCase
             self::assertNotNull($row['task_finished_at']);
             self::assertNotNull($row['cleanup_at']);
         } finally {
-            PostgresIntegrationConnection::dropTableIfExists($pdo, $tableName);
+            DatabaseIntegrationConnection::dropTableIfExists($pdo, $tableName);
         }
     }
 
     public function testRunSingleCancelsClaimedTaskWhenCancellationWasRequested(): void {
-        $pdo = PostgresIntegrationConnection::requirePdo($this);
-        $tableName = PostgresIntegrationConnection::uniqueTableName();
+        $pdo = DatabaseIntegrationConnection::requirePdo($this);
+        $tableName = DatabaseIntegrationConnection::uniqueTableName();
 
         try {
             $configuration = new QueueConfiguration($tableName);
@@ -1082,13 +1074,13 @@ final class RunnerIntegrationTest extends TestCase
             self::assertSame('499', $row['last_error_code']);
             self::assertSame('Cancelled before execution.', $row['last_error_message']);
         } finally {
-            PostgresIntegrationConnection::dropTableIfExists($pdo, $tableName);
+            DatabaseIntegrationConnection::dropTableIfExists($pdo, $tableName);
         }
     }
 
     public function testRunSingleKeepsTaskCancelledWhenStepCancelsDuringExecution(): void {
-        $pdo = PostgresIntegrationConnection::requirePdo($this);
-        $tableName = PostgresIntegrationConnection::uniqueTableName();
+        $pdo = DatabaseIntegrationConnection::requirePdo($this);
+        $tableName = DatabaseIntegrationConnection::uniqueTableName();
 
         try {
             $configuration = new QueueConfiguration($tableName);
@@ -1125,7 +1117,7 @@ final class RunnerIntegrationTest extends TestCase
             self::assertSame('499', $row['last_error_code']);
             self::assertSame('Cancelled during execution.', $row['last_error_message']);
         } finally {
-            PostgresIntegrationConnection::dropTableIfExists($pdo, $tableName);
+            DatabaseIntegrationConnection::dropTableIfExists($pdo, $tableName);
         }
     }
 
@@ -1134,7 +1126,7 @@ final class RunnerIntegrationTest extends TestCase
      */
     private function fetchTaskRow(\PDO $pdo, string $tableName, int $taskId): array {
         $statement = $pdo->prepare(
-            sprintf('SELECT * FROM "%s" WHERE task_id = :task_id', str_replace('"', '""', $tableName)),
+            sprintf('SELECT * FROM %s WHERE task_id = :task_id', $this->qualifiedIdentifier($pdo, $tableName)),
         );
         $statement->execute(['task_id' => $taskId]);
         $row = $statement->fetch(\PDO::FETCH_ASSOC);
@@ -1152,7 +1144,7 @@ final class RunnerIntegrationTest extends TestCase
 
     private function fetchQueueRecord(\PDO $pdo, string $tableName, int $taskId): QueueRecord {
         $statement = $pdo->prepare(
-            sprintf('SELECT * FROM "%s" WHERE task_id = :task_id', str_replace('"', '""', $tableName)),
+            sprintf('SELECT * FROM %s WHERE task_id = :task_id', $this->qualifiedIdentifier($pdo, $tableName)),
         );
         $statement->execute(['task_id' => $taskId]);
         $row = $statement->fetch(\PDO::FETCH_ASSOC);
@@ -1164,11 +1156,18 @@ final class RunnerIntegrationTest extends TestCase
 
     private function taskExists(\PDO $pdo, string $tableName, int $taskId): bool {
         $statement = $pdo->prepare(
-            sprintf('SELECT EXISTS (SELECT 1 FROM "%s" WHERE task_id = :task_id)', str_replace('"', '""', $tableName)),
+            sprintf(
+                'SELECT EXISTS (SELECT 1 FROM %s WHERE task_id = :task_id)',
+                $this->qualifiedIdentifier($pdo, $tableName),
+            ),
         );
         $statement->execute(['task_id' => $taskId]);
 
         return (bool) $statement->fetchColumn();
+    }
+
+    private function qualifiedIdentifier(\PDO $pdo, string $identifier): string {
+        return DatabaseIntegrationConnection::platform($pdo)->qualifyIdentifier(null, $identifier);
     }
 
     /**

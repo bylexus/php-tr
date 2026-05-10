@@ -24,6 +24,10 @@
 		"/^unsetopt correct && set -a && source \\.env && set \\+a && vendor/bin/phpunit --configuration phpunit\\.xml tests/TaskTest\\.php tests/SchemaManagerTest\\.php tests/Integration/SchemaManagerIntegrationTest\\.php tests/Integration/PostgresQueueIntegrationTest\\.php tests/Integration/RunnerIntegrationTest\\.php$/": {
 			"approve": true,
 			"matchCommandLine": true
+		},
+		"/^php -l tests/Support/AbstractDatabaseIntegrationTestCase\\.php && php -l tests/Support/PostgresIntegrationConnection\\.php && php -l tests/Support/run-single\\.php && php -l tests/Support/run-loop\\.php$/": {
+			"approve": true,
+			"matchCommandLine": true
 		}
 	}
 }

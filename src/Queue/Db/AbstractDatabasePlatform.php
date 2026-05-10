@@ -7,6 +7,8 @@ namespace ByLexus\TaskRunner\Queue\Db;
 use ByLexus\TaskRunner\Queue\QueueConfiguration;
 
 abstract class AbstractDatabasePlatform implements DatabasePlatform {
+    private const MAX_DERIVED_IDENTIFIER_LENGTH = 63;
+
     public function supportsNotifications(): bool {
         return false;
     }
@@ -245,8 +247,26 @@ abstract class AbstractDatabasePlatform implements DatabasePlatform {
 
     protected function derivedName(QueueConfiguration $configuration, string $suffix): string {
         $sanitizedTableName = preg_replace('/[^a-zA-Z0-9_]+/', '_', $configuration->getTableName()) ?? 'queue';
+        $sanitizedTableName = trim($sanitizedTableName, '_');
 
-        return sprintf('%s_%s', trim($sanitizedTableName, '_'), $suffix);
+        if ($sanitizedTableName === '') {
+            $sanitizedTableName = 'queue';
+        }
+
+        $derivedName = sprintf('%s_%s', $sanitizedTableName, $suffix);
+
+        if (strlen($derivedName) <= self::MAX_DERIVED_IDENTIFIER_LENGTH) {
+            return $derivedName;
+        }
+
+        $hash = substr(hash('sha1', $sanitizedTableName), 0, 8);
+        $maxBaseLength = self::MAX_DERIVED_IDENTIFIER_LENGTH - strlen($suffix) - strlen($hash) - 2;
+
+        if ($maxBaseLength < 1) {
+            $maxBaseLength = 1;
+        }
+
+        return sprintf('%s_%s_%s', substr($sanitizedTableName, 0, $maxBaseLength), $hash, $suffix);
     }
 
     protected function defaultNamespaceExpression(QueueConfiguration $configuration): string {
