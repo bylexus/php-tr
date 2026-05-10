@@ -4,7 +4,7 @@
 
 PHP Task Runner is a PostgreSQL-backed workflow library for PHP >= 8.3. It is meant to queue and run jobs that are to be processed in the background of a frontend application (e.g. queue an email to be sent in the background).
 
-You model work as a `Task` that defines a workflow consisting of `Step`s. Enqueued Tasks then get worked on step-by-step by a Runner. The library stores the Tasks and Steps state in the database so work can survive worker restarts and multiple runner processes can safely compete for queued work.
+You model work as a `Task` that defines a workflow consisting of `Step`s. Enqueued Tasks then get worked on step-by-step by a Runner. The library stores the Tasks and Steps state in the database so multiple runner processes can safely compete for queued work.
 
 The public surface is intentionally small and framework agnostic:
 

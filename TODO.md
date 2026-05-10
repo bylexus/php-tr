@@ -14,8 +14,6 @@
 
 ## Arbitary notes
 
-- during singal shutdown, cleanup queue: running tasks should be reset to queued
-- retry delay (time to retry)
 - fetch task, task list functions
 - re-queue task / step from within step
 - explore possibilities for mysql/sqlite
