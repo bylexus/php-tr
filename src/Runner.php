@@ -247,6 +247,17 @@ class Runner {
     }
 
     private function processClaimedRecord(QueueRecord $record): void {
+        $this->logger->debug('Runner picked up claimed step.', [
+            'runnerId' => $this->runnerConfiguration->getRunnerId(),
+            'taskId' => $record->taskId,
+            'taskClass' => $record->taskClass,
+            'stepClass' => $record->stepClass,
+            'taskStatus' => $record->taskStatus,
+            'stepStatus' => $record->stepStatus,
+            'claimedAt' => $record->claimedAt?->format(DATE_ATOM),
+            'claimedBy' => $record->claimedBy,
+        ]);
+
         try {
             $task = Task::fromQueueRecord(
                 $record,
@@ -380,7 +391,18 @@ class Runner {
                 'stepAttempt' => $step->getStepAttempt(),
             ]);
 
-            return $step->execute($task);
+            $result = $step->execute($task);
+
+            $this->logger->debug('Runner completed step execution.', [
+                'runnerId' => $this->runnerConfiguration->getRunnerId(),
+                'taskId' => $task->getId(),
+                'taskClass' => $task::class,
+                'stepClass' => $step::class,
+                'stepAttempt' => $step->getStepAttempt(),
+                'stepStatus' => $result->getStatus()->value,
+            ]);
+
+            return $result;
         } catch (\Throwable $throwable) {
             $this->logger->error('Runner caught step exception.', [
                 'runnerId' => $this->runnerConfiguration->getRunnerId(),
