@@ -5,6 +5,8 @@ WORKDIR /src
 
 RUN apt-get update \
     && apt-get install --no-install-recommends -y \
+        git \
+        unzip \
         libpq-dev \
     && apt-get autoremove -y && apt-get clean -y \
     && docker-php-ext-install pdo_mysql pgsql pdo_pgsql pcntl
