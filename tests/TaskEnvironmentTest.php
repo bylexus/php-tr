@@ -141,7 +141,7 @@ final class TaskEnvironmentTest extends TestCase
         $resolvedRunnerConfiguration = $this->readPrivateProperty($runner, 'runnerConfiguration');
 
         self::assertSame($connection, $this->readPrivateProperty($runner, 'connection'));
-        self::assertSame($configuration, $this->readPrivateProperty($runner, 'queueConfiguration'));
+        self::assertSame($configuration, $this->readPrivateProperty($this->readPrivateProperty($runner, 'taskEnvironment'), 'queueConfiguration'));
         self::assertInstanceOf(RunnerConfiguration::class, $resolvedRunnerConfiguration);
         self::assertSame('runner-test', $resolvedRunnerConfiguration->getRunnerId());
         self::assertSame($container, $resolvedRunnerConfiguration->getContainer());
