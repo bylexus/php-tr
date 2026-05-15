@@ -39,18 +39,34 @@ abstract class Task {
     private ?LoggerInterface $logger = null;
 
     private ?int $id = null;
+    private string $taskClass;
+    private ?string $stepClass = null;
     private ?TaskStatus $status = null;
     private int $priority = self::PRIO_NORMAL;
     private ?\DateTimeImmutable $createdAt = null;
     private ?\DateTimeImmutable $startedAt = null;
     private ?\DateTimeImmutable $finishedAt = null;
     private ?\DateTimeImmutable $cleanupAt = null;
+    private ?StepStatus $stepStatus = null;
+    private int $stepAttempt = 0;
+    private ?\DateTimeImmutable $stepStartedAt = null;
+    private ?\DateTimeImmutable $stepFinishedAt = null;
+    private mixed $result = null;
+    private mixed $error = null;
+    private ?\DateTimeImmutable $availableAt = null;
+    private ?\DateTimeImmutable $claimedAt = null;
+    private ?string $claimedBy = null;
+    private ?string $lastErrorCode = null;
+    private ?string $lastErrorMessage = null;
     private bool $cancelRequested = false;
     private ?string $cancelReason = null;
+    private ?\DateTimeImmutable $updatedAt = null;
     private ?Step $actualStep = null;
     private ?DatabaseQueue $queue = null;
 
     public function __construct(?LoggerInterface $logger = null) {
+        $this->taskClass = static::class;
+
         if ($logger !== null) {
             $this->setLogger($logger);
         }
@@ -62,6 +78,14 @@ abstract class Task {
 
     public function getId(): ?int {
         return $this->id;
+    }
+
+    public function getTaskClass(): string {
+        return $this->taskClass;
+    }
+
+    public function getStepClass(): ?string {
+        return $this->stepClass;
     }
 
     public function getStatus(): ?TaskStatus {
@@ -86,6 +110,50 @@ abstract class Task {
 
     public function getCleanupAt(): ?\DateTimeImmutable {
         return $this->cleanupAt;
+    }
+
+    public function getStepStatus(): ?StepStatus {
+        return $this->stepStatus;
+    }
+
+    public function getStepAttempt(): int {
+        return $this->stepAttempt;
+    }
+
+    public function getStepStartedAt(): ?\DateTimeImmutable {
+        return $this->stepStartedAt;
+    }
+
+    public function getStepFinishedAt(): ?\DateTimeImmutable {
+        return $this->stepFinishedAt;
+    }
+
+    public function getResult(): mixed {
+        return $this->result;
+    }
+
+    public function getError(): mixed {
+        return $this->error;
+    }
+
+    public function getAvailableAt(): ?\DateTimeImmutable {
+        return $this->availableAt;
+    }
+
+    public function getClaimedAt(): ?\DateTimeImmutable {
+        return $this->claimedAt;
+    }
+
+    public function getClaimedBy(): ?string {
+        return $this->claimedBy;
+    }
+
+    public function getLastErrorCode(): ?string {
+        return $this->lastErrorCode;
+    }
+
+    public function getLastErrorMessage(): ?string {
+        return $this->lastErrorMessage;
     }
 
     public function cancel(string $reason): void {
@@ -133,6 +201,10 @@ abstract class Task {
 
     public function getCancelReason(): ?string {
         return $this->cancelReason;
+    }
+
+    public function getUpdatedAt(): ?\DateTimeImmutable {
+        return $this->updatedAt;
     }
 
     public function actualStep(): ?Step {
@@ -316,15 +388,29 @@ abstract class Task {
         ?DatabaseQueue $queue = null,
     ): void {
         $this->id = $record->taskId;
+        $this->taskClass = $record->taskClass;
+        $this->stepClass = $record->stepClass;
         $this->status = TaskStatus::from($record->taskStatus);
         $this->priority = $record->priority;
         $this->createdAt = $record->taskCreatedAt;
         $this->startedAt = $record->taskStartedAt;
         $this->finishedAt = $record->taskFinishedAt;
         $this->cleanupAt = $record->cleanupAt;
+        $this->stepStatus = $record->stepStatus === null ? null : StepStatus::from($record->stepStatus);
+        $this->stepAttempt = $record->stepAttempt;
+        $this->stepStartedAt = $record->stepStartedAt;
+        $this->stepFinishedAt = $record->stepFinishedAt;
         $this->setStoredPayload($record->payload, $attachmentBlobStore);
+        $this->result = $record->result;
+        $this->error = $record->error;
+        $this->availableAt = $record->availableAt;
+        $this->claimedAt = $record->claimedAt;
+        $this->claimedBy = $record->claimedBy;
+        $this->lastErrorCode = $record->lastErrorCode;
+        $this->lastErrorMessage = $record->lastErrorMessage;
         $this->cancelRequested = $record->cancelRequested;
         $this->cancelReason = $record->cancelReason;
+        $this->updatedAt = $record->updatedAt;
         $this->actualStep = $actualStep;
         $this->queue = $queue;
 
@@ -442,13 +528,27 @@ abstract class Task {
 
     private function applyCancelledRecord(QueueRecord $record): void {
         $this->status = TaskStatus::from($record->taskStatus);
+        $this->taskClass = $record->taskClass;
+        $this->stepClass = $record->stepClass;
         $this->priority = $record->priority;
         $this->createdAt = $record->taskCreatedAt;
         $this->startedAt = $record->taskStartedAt;
         $this->finishedAt = $record->taskFinishedAt;
         $this->cleanupAt = $record->cleanupAt;
+        $this->stepStatus = $record->stepStatus === null ? null : StepStatus::from($record->stepStatus);
+        $this->stepAttempt = $record->stepAttempt;
+        $this->stepStartedAt = $record->stepStartedAt;
+        $this->stepFinishedAt = $record->stepFinishedAt;
+        $this->result = $record->result;
+        $this->error = $record->error;
+        $this->availableAt = $record->availableAt;
+        $this->claimedAt = $record->claimedAt;
+        $this->claimedBy = $record->claimedBy;
+        $this->lastErrorCode = $record->lastErrorCode;
+        $this->lastErrorMessage = $record->lastErrorMessage;
         $this->cancelRequested = $record->cancelRequested;
         $this->cancelReason = $record->cancelReason;
+        $this->updatedAt = $record->updatedAt;
 
         if ($this->actualStep !== null) {
             $this->actualStep->hydrateFromQueueRecord($record);

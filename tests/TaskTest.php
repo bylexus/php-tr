@@ -156,6 +156,73 @@ final class TaskTest extends TestCase
         self::assertSame(2, $task->actualStep()?->getStepAttempt());
     }
 
+    public function testTaskExposesAllHydratedQueueColumnsViaGetters(): void {
+        $createdAt = new \DateTimeImmutable('2026-01-01T00:00:00+00:00');
+        $startedAt = new \DateTimeImmutable('2026-01-01T00:01:00+00:00');
+        $finishedAt = new \DateTimeImmutable('2026-01-01T00:02:00+00:00');
+        $cleanupAt = new \DateTimeImmutable('2026-01-02T00:00:00+00:00');
+        $stepStartedAt = new \DateTimeImmutable('2026-01-01T00:01:10+00:00');
+        $stepFinishedAt = new \DateTimeImmutable('2026-01-01T00:01:50+00:00');
+        $availableAt = new \DateTimeImmutable('2026-01-01T00:00:30+00:00');
+        $claimedAt = new \DateTimeImmutable('2026-01-01T00:01:05+00:00');
+        $updatedAt = new \DateTimeImmutable('2026-01-01T00:02:10+00:00');
+        $result = (object) ['status' => 'failed', 'meta' => (object) ['retry' => 1], 'message' => 'boom'];
+        $error = (object) ['code' => 500, 'message' => 'internal', 'details' => (object) ['trace' => 'x']];
+
+        $record = new QueueRecord(
+            42,
+            QueueWorkflowTaskFixture::class,
+            QueueWorkflowStepFixture::class,
+            TaskStatus::FAILED->value,
+            $createdAt,
+            $startedAt,
+            $finishedAt,
+            $cleanupAt,
+            StepStatus::FAILED->value,
+            3,
+            $stepStartedAt,
+            $stepFinishedAt,
+            ['foo' => 'bar'],
+            $result,
+            $error,
+            $availableAt,
+            $claimedAt,
+            'runner-1',
+            '500',
+            'internal',
+            true,
+            'stop',
+            $updatedAt,
+            Task::PRIO_HIGH,
+        );
+
+        $task = Task::fromQueueRecord($record);
+
+        self::assertSame(42, $task->getId());
+        self::assertSame(QueueWorkflowTaskFixture::class, $task->getTaskClass());
+        self::assertSame(QueueWorkflowStepFixture::class, $task->getStepClass());
+        self::assertSame(TaskStatus::FAILED, $task->getStatus());
+        self::assertSame(Task::PRIO_HIGH, $task->getPriority());
+        self::assertSame($createdAt, $task->getCreatedAt());
+        self::assertSame($startedAt, $task->getStartedAt());
+        self::assertSame($finishedAt, $task->getFinishedAt());
+        self::assertSame($cleanupAt, $task->getCleanupAt());
+        self::assertSame(StepStatus::FAILED, $task->getStepStatus());
+        self::assertSame(3, $task->getStepAttempt());
+        self::assertSame($stepStartedAt, $task->getStepStartedAt());
+        self::assertSame($stepFinishedAt, $task->getStepFinishedAt());
+        self::assertSame($result, $task->getResult());
+        self::assertSame($error, $task->getError());
+        self::assertSame($availableAt, $task->getAvailableAt());
+        self::assertSame($claimedAt, $task->getClaimedAt());
+        self::assertSame('runner-1', $task->getClaimedBy());
+        self::assertSame('500', $task->getLastErrorCode());
+        self::assertSame('internal', $task->getLastErrorMessage());
+        self::assertTrue($task->isCancelRequested());
+        self::assertSame('stop', $task->getCancelReason());
+        self::assertSame($updatedAt, $task->getUpdatedAt());
+    }
+
     public function testTaskReconstitutionPropagatesLoggerToTaskAndStep(): void {
         $logger = new SpyLogger();
         $record = new QueueRecord(
