@@ -244,7 +244,7 @@ SQL;
                 $record = $this->loadInsertedRecord('Failed to read enqueued queue record.');
             }
 
-            $record = $this->update((int) $record->taskId, ['payload_json' => $task->getStoredPayload()], false);
+            $record = $this->update((int) $record->taskId, ['payload_json' => $task->getPayload()], false);
             $this->emitNotification((string) $record->taskId);
 
             if ($startedTransaction) {

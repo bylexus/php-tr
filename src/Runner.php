@@ -726,7 +726,7 @@ class Runner {
     ): array {
         $now = new \DateTimeImmutable('now', new \DateTimeZone('UTC'));
         $changes = [
-            'payload_json' => $task->getStoredPayload(),
+            'payload_json' => $task->getPayload(),
             'result_json' => [
                 'status' => $result->getStatus()->value,
                 'meta' => $result->getMeta(),

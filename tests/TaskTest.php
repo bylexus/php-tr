@@ -385,19 +385,19 @@ final class TaskTest extends TestCase
 
         $task = Task::fromQueueRecord($record);
 
-        self::assertInstanceOf(\stdClass::class, $task->getStoredPayload());
+        self::assertInstanceOf(\stdClass::class, $task->getPayload());
         self::assertInstanceOf(\stdClass::class, $task->getPayload());
         self::assertInstanceOf(QueueWorkflowStepFixture::class, $task->actualStep());
-        self::assertInstanceOf(\stdClass::class, $task->getStoredPayload());
+        self::assertInstanceOf(\stdClass::class, $task->getPayload());
     }
 
     public function testStoredPayloadMaterializesRootObjectWithoutPriorAccess(): void {
         $task = new QueueWorkflowTaskFixture();
 
         self::assertFalse($task->hasStoredPayload());
-        self::assertInstanceOf(\stdClass::class, $task->getStoredPayload());
+        self::assertInstanceOf(\stdClass::class, $task->getPayload());
         self::assertTrue($task->hasStoredPayload());
-        self::assertSame($task->getPayload(), $task->getStoredPayload());
+        self::assertSame($task->getPayload(), $task->getPayload());
     }
 
     public function testTaskHydratesAttachmentEnvelopeIntoFileAttachmentObject(): void {
@@ -456,7 +456,7 @@ final class TaskTest extends TestCase
         self::assertSame($namedPayload, $task->getPayload('details'));
         self::assertSame($namedPayload, $task->getPayload()->details);
         self::assertSame('somevalue', $task->getPayload()->details->bar);
-        self::assertSame($rootPayload, $task->getStoredPayload());
+        self::assertSame($rootPayload, $task->getPayload());
     }
 
     public function testTopLevelPayloadValuesRemainUntouchedWhenAlreadySet(): void {

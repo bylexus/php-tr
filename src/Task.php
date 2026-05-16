@@ -189,7 +189,9 @@ abstract class Task implements DisplayName {
                 $connection->commit();
             }
 
-            $this->applyCancelledRecord($record);
+            $payload = $this->payload;
+            $this->hydrateFromQueueRecord($record, $this->actualStep, $this->queue->getAttachmentBlobStore(), $this->queue);
+            $this->payload = $payload;
         } catch (\Throwable $throwable) {
             if ($startedTransaction && $connection->inTransaction()) {
                 $connection->rollBack();
@@ -242,10 +244,6 @@ abstract class Task implements DisplayName {
         return $rootPayload->{$property};
     }
 
-    public function getStoredPayload(): mixed {
-        return $this->materializeRootPayload();
-    }
-
     public function hasStoredPayload(): bool {
         return $this->payload !== null;
     }
@@ -293,7 +291,7 @@ abstract class Task implements DisplayName {
         try {
             $record = $this->queue->update(
                 $this->id,
-                ['payload_json' => $this->getStoredPayload()],
+                ['payload_json' => $this->getPayload()],
                 true,
             );
 
@@ -541,30 +539,5 @@ abstract class Task implements DisplayName {
         } catch (\Throwable) {
             return new \DateInterval(CleanupAfter::DEFAULT_UNSUCCESSFUL_SPEC);
         }
-    }
-
-    private function applyCancelledRecord(QueueRecord $record): void {
-        $this->status = TaskStatus::from($record->taskStatus);
-        $this->taskClass = $record->taskClass;
-        $this->stepClass = $record->stepClass;
-        $this->priority = $record->priority;
-        $this->createdAt = $record->taskCreatedAt;
-        $this->startedAt = $record->taskStartedAt;
-        $this->finishedAt = $record->taskFinishedAt;
-        $this->cleanupAt = $record->cleanupAt;
-        $this->stepStatus = $record->stepStatus === null ? null : StepStatus::from($record->stepStatus);
-        $this->stepAttempt = $record->stepAttempt;
-        $this->stepStartedAt = $record->stepStartedAt;
-        $this->stepFinishedAt = $record->stepFinishedAt;
-        $this->result = $record->result;
-        $this->error = $record->error;
-        $this->availableAt = $record->availableAt;
-        $this->claimedAt = $record->claimedAt;
-        $this->claimedBy = $record->claimedBy;
-        $this->lastErrorCode = $record->lastErrorCode;
-        $this->lastErrorMessage = $record->lastErrorMessage;
-        $this->cancelRequested = $record->cancelRequested;
-        $this->cancelReason = $record->cancelReason;
-        $this->updatedAt = $record->updatedAt;
     }
 }
