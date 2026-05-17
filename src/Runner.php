@@ -56,13 +56,13 @@ class Runner {
         $this->queue = $taskEnvironment->getDatabaseQueue();
         $this->signalHandler = new SignalHandler($this->handleStopRequested(...));
 
-        $this->logger->debug('Runner initialized.', [
+        $this->logger->debug('Runner initialized [runnerId={runnerId}]', [
             'runnerId' => $this->runnerConfiguration->getRunnerId(),
         ]);
     }
 
     public function runSingle(?string $runnerId = null): int {
-        $this->logger->debug('Runner single pass started.', [
+        $this->logger->debug('Runner single pass started [runnerId={runnerId}]', [
             'runnerId' => $runnerId ?: $this->runnerConfiguration->getRunnerId(),
         ]);
         $this->bootstrapSchemaIfConfigured();
@@ -87,7 +87,7 @@ class Runner {
         }
 
         if ($processed === 0) {
-            $this->logger->debug('Runner found no queued task to process.', [
+            $this->logger->debug('Runner found no queued task to process [runnerId={runnerId}]', [
                 'runnerId' => $this->runnerConfiguration->getRunnerId(),
             ]);
 
@@ -98,7 +98,7 @@ class Runner {
     }
 
     public function runLoop(?string $runnerId = null): void {
-        $this->logger->info('Runner loop started.', [
+        $this->logger->info('Runner loop started [runnerId={runnerId}]', [
             'runnerId' => $runnerId ?: $this->runnerConfiguration->getRunnerId(),
         ]);
         $this->bootstrapSchemaIfConfigured();
@@ -135,21 +135,27 @@ class Runner {
                     try {
                         $this->connection->rollBack();
                     } catch (\Throwable $rollbackThrowable) {
-                        $this->logger->error('Runner failed to roll back transaction after loop error.', [
-                            'runnerId' => $this->runnerConfiguration->getRunnerId(),
-                            'exceptionClass' => $rollbackThrowable::class,
-                            'errorCode' => (int) $rollbackThrowable->getCode(),
-                            'errorMessage' => $rollbackThrowable->getMessage(),
-                        ]);
+                        $this->logger->error(
+                            'Runner failed to roll back transaction after loop error [runnerId={runnerId} exceptionClass={exceptionClass} errorCode={errorCode} errorMessage={errorMessage}]',
+                            [
+                                'runnerId' => $this->runnerConfiguration->getRunnerId(),
+                                'exceptionClass' => $rollbackThrowable::class,
+                                'errorCode' => (int) $rollbackThrowable->getCode(),
+                                'errorMessage' => $rollbackThrowable->getMessage(),
+                            ],
+                        );
                     }
                 }
 
-                $this->logger->error('Runner loop caught unhandled exception; continuing.', [
-                    'runnerId' => $this->runnerConfiguration->getRunnerId(),
-                    'exceptionClass' => $throwable::class,
-                    'errorCode' => (int) $throwable->getCode(),
-                    'errorMessage' => $throwable->getMessage(),
-                ]);
+                $this->logger->error(
+                    'Runner loop caught unhandled exception; continuing [runnerId={runnerId} exceptionClass={exceptionClass} errorCode={errorCode} errorMessage={errorMessage}]',
+                    [
+                        'runnerId' => $this->runnerConfiguration->getRunnerId(),
+                        'exceptionClass' => $throwable::class,
+                        'errorCode' => (int) $throwable->getCode(),
+                        'errorMessage' => $throwable->getMessage(),
+                    ],
+                );
 
                 if ($this->signalHandler->isStopRequested()) {
                     break;
@@ -157,7 +163,7 @@ class Runner {
             }
         }
 
-        $this->logger->info('Runner loop stopped.', [
+        $this->logger->info('Runner loop stopped [runnerId={runnerId}]', [
             'runnerId' => $this->runnerConfiguration->getRunnerId(),
         ]);
     }
@@ -173,19 +179,26 @@ class Runner {
             $signalName,
         );
 
-        $this->logger->notice($message, [
-            'runnerId' => $this->runnerConfiguration->getRunnerId(),
-            'signal' => $signal,
-        ]);
+        $this->logger->notice(
+            'Cancellation requested via {signalName}. The runner will stop after the current step completes. [runnerId={runnerId} signal={signal}]',
+            [
+                'runnerId' => $this->runnerConfiguration->getRunnerId(),
+                'signal' => $signal,
+                'signalName' => $signalName,
+            ],
+        );
 
         $failedClaims = $this->failClaimedRunningTasksForStopRequest($signalName);
 
         if ($failedClaims > 0) {
-            $this->logger->warning('Runner marked claimed running tasks as failed after stop request.', [
-                'runnerId' => $this->runnerConfiguration->getRunnerId(),
-                'signal' => $signal,
-                'failedClaims' => $failedClaims,
-            ]);
+            $this->logger->warning(
+                'Runner marked claimed running tasks as failed after stop request [runnerId={runnerId} signal={signal} failedClaims={failedClaims}]',
+                [
+                    'runnerId' => $this->runnerConfiguration->getRunnerId(),
+                    'signal' => $signal,
+                    'failedClaims' => $failedClaims,
+                ],
+            );
         }
 
         if (defined('STDERR')) {
@@ -198,7 +211,7 @@ class Runner {
             return;
         }
 
-        $this->logger->info('Runner bootstrapping queue schema.', [
+        $this->logger->info('Runner bootstrapping queue schema [runnerId={runnerId}]', [
             'runnerId' => $this->runnerConfiguration->getRunnerId(),
         ]);
 
@@ -218,19 +231,25 @@ class Runner {
         );
         $this->notificationListenerRegistered = true;
 
-        $this->logger->debug('Runner registered notification listener.', [
-            'runnerId' => $this->runnerConfiguration->getRunnerId(),
-            'channel' => $this->queue->getNotificationChannel(),
-        ]);
+        $this->logger->debug(
+            'Runner registered notification listener [runnerId={runnerId} channel={channel}]',
+            [
+                'runnerId' => $this->runnerConfiguration->getRunnerId(),
+                'channel' => $this->queue->getNotificationChannel(),
+            ],
+        );
     }
 
     private function waitForNotification(): void {
         $timeoutMilliseconds = $this->runnerConfiguration->getNotificationWaitTimeoutSeconds() * 1000;
 
-        $this->logger->debug('Runner waiting for notification.', [
-            'runnerId' => $this->runnerConfiguration->getRunnerId(),
-            'timeoutMilliseconds' => $timeoutMilliseconds,
-        ]);
+        $this->logger->debug(
+            'Runner waiting for notification [runnerId={runnerId} timeoutMilliseconds={timeoutMilliseconds}]',
+            [
+                'runnerId' => $this->runnerConfiguration->getRunnerId(),
+                'timeoutMilliseconds' => $timeoutMilliseconds,
+            ],
+        );
 
         // Plain PDO pgsql connections still need the alias path; on PHP 8.5 we suppress only that deprecation locally.
         if (class_exists('Pdo\\Pgsql') && $this->connection instanceof \Pdo\Pgsql) {
@@ -269,16 +288,19 @@ class Runner {
     }
 
     private function processClaimedRecord(QueueRecord $record): void {
-        $this->logger->debug('Runner picked up claimed step.', [
-            'runnerId' => $this->runnerConfiguration->getRunnerId(),
-            'taskId' => $record->taskId,
-            'taskClass' => $record->taskClass,
-            'stepClass' => $record->stepClass,
-            'taskStatus' => $record->taskStatus,
-            'stepStatus' => $record->stepStatus,
-            'claimedAt' => $record->claimedAt?->format(DATE_ATOM),
-            'claimedBy' => $record->claimedBy,
-        ]);
+        $this->logger->debug(
+            'Runner picked up claimed step [runnerId={runnerId} taskId={taskId} taskClass={taskClass} stepClass={stepClass} taskStatus={taskStatus} stepStatus={stepStatus} claimedAt={claimedAt} claimedBy={claimedBy}]',
+            [
+                'runnerId' => $this->runnerConfiguration->getRunnerId(),
+                'taskId' => $record->taskId,
+                'taskClass' => $record->taskClass,
+                'stepClass' => $record->stepClass,
+                'taskStatus' => $record->taskStatus,
+                'stepStatus' => $record->stepStatus,
+                'claimedAt' => $record->claimedAt?->format(DATE_ATOM),
+                'claimedBy' => $record->claimedBy,
+            ],
+        );
 
         try {
             $task = Task::fromQueueRecord(
@@ -298,28 +320,34 @@ class Runner {
 
             $task->setLogger($this->logger);
 
-            $this->logger->info('Runner claimed task for execution.', [
-                'runnerId' => $this->runnerConfiguration->getRunnerId(),
-                'taskId' => $record->taskId,
-                'taskClass' => $record->taskClass,
-                'stepClass' => $record->stepClass,
-                'taskStatus' => $record->taskStatus,
-                'stepStatus' => $record->stepStatus,
-                'claimedAt' => $record->claimedAt?->format(DATE_ATOM),
-                'claimedBy' => $record->claimedBy,
-            ]);
+            $this->logger->info(
+                'Runner claimed task for execution [runnerId={runnerId} taskId={taskId} taskClass={taskClass} stepClass={stepClass} taskStatus={taskStatus} stepStatus={stepStatus} claimedAt={claimedAt} claimedBy={claimedBy}]',
+                [
+                    'runnerId' => $this->runnerConfiguration->getRunnerId(),
+                    'taskId' => $record->taskId,
+                    'taskClass' => $record->taskClass,
+                    'stepClass' => $record->stepClass,
+                    'taskStatus' => $record->taskStatus,
+                    'stepStatus' => $record->stepStatus,
+                    'claimedAt' => $record->claimedAt?->format(DATE_ATOM),
+                    'claimedBy' => $record->claimedBy,
+                ],
+            );
 
             $taskMetadata = $this->metadataResolver->resolveTaskMetadata($record->taskClass);
             $stepMetadata = $this->metadataResolver->resolveStepMetadata($record->stepClass ?? '', $taskMetadata);
         } catch (\Throwable $throwable) {
-            $this->logger->error('Runner failed to hydrate claimed task.', [
-                'runnerId' => $this->runnerConfiguration->getRunnerId(),
-                'taskId' => $record->taskId,
-                'taskClass' => $record->taskClass,
-                'stepClass' => $record->stepClass,
-                'exceptionClass' => $throwable::class,
-                'errorCode' => (int) $throwable->getCode(),
-            ]);
+            $this->logger->error(
+                'Runner failed to hydrate claimed task [runnerId={runnerId} taskId={taskId} taskClass={taskClass} stepClass={stepClass} exceptionClass={exceptionClass} errorCode={errorCode}]',
+                [
+                    'runnerId' => $this->runnerConfiguration->getRunnerId(),
+                    'taskId' => $record->taskId,
+                    'taskClass' => $record->taskClass,
+                    'stepClass' => $record->stepClass,
+                    'exceptionClass' => $throwable::class,
+                    'errorCode' => (int) $throwable->getCode(),
+                ],
+            );
             $this->persistClaimFailure($record, $throwable);
 
             return;
@@ -355,11 +383,14 @@ class Runner {
             }
 
             if ($nextStep !== null) {
-                $this->logger->info('Task selected next step.', [
-                    'taskId' => $record->taskId,
-                    'taskClass' => $record->taskClass,
-                    'stepClass' => $nextStep::class,
-                ]);
+                $this->logger->info(
+                    'Task selected next step [taskId={taskId} taskClass={taskClass} stepClass={stepClass}]',
+                    [
+                        'taskId' => $record->taskId,
+                        'taskClass' => $record->taskClass,
+                        'stepClass' => $nextStep::class,
+                    ],
+                );
             }
 
             $changes = $this->changesForResult(
@@ -372,14 +403,17 @@ class Runner {
                 $retries,
                 $retryDelay,
             );
-            $this->logger->info('Runner persisting task result.', [
-                'runnerId' => $this->runnerConfiguration->getRunnerId(),
-                'taskId' => $record->taskId,
-                'taskClass' => $record->taskClass,
-                'stepClass' => $record->stepClass,
-                'stepStatus' => $result->getStatus()->value,
-                'nextStepClass' => $nextStep === null ? null : $nextStep::class,
-            ]);
+            $this->logger->info(
+                'Runner persisting task result [runnerId={runnerId} taskId={taskId} taskClass={taskClass} stepClass={stepClass} stepStatus={stepStatus} nextStepClass={nextStepClass}]',
+                [
+                    'runnerId' => $this->runnerConfiguration->getRunnerId(),
+                    'taskId' => $record->taskId,
+                    'taskClass' => $record->taskClass,
+                    'stepClass' => $record->stepClass,
+                    'stepStatus' => $result->getStatus()->value,
+                    'nextStepClass' => $nextStep === null ? null : $nextStep::class,
+                ],
+            );
             $this->queue->update((int) $record->taskId, $changes, true);
             $this->connection->commit();
         } catch (\Throwable $throwable) {
@@ -387,14 +421,17 @@ class Runner {
                 $this->connection->rollBack();
             }
 
-            $this->logger->error('Runner failed while persisting task result.', [
-                'runnerId' => $this->runnerConfiguration->getRunnerId(),
-                'taskId' => $record->taskId,
-                'taskClass' => $record->taskClass,
-                'stepClass' => $record->stepClass,
-                'exceptionClass' => $throwable::class,
-                'errorCode' => (int) $throwable->getCode(),
-            ]);
+            $this->logger->error(
+                'Runner failed while persisting task result [runnerId={runnerId} taskId={taskId} taskClass={taskClass} stepClass={stepClass} exceptionClass={exceptionClass} errorCode={errorCode}]',
+                [
+                    'runnerId' => $this->runnerConfiguration->getRunnerId(),
+                    'taskId' => $record->taskId,
+                    'taskClass' => $record->taskClass,
+                    'stepClass' => $record->stepClass,
+                    'exceptionClass' => $throwable::class,
+                    'errorCode' => (int) $throwable->getCode(),
+                ],
+            );
 
             throw $throwable;
         }
@@ -402,44 +439,62 @@ class Runner {
 
     private function executeStep(Task $task, Step $step): StepResult {
         try {
-            $this->logger->info('Runner executing step.', [
-                'runnerId' => $this->runnerConfiguration->getRunnerId(),
-                'taskId' => $task->getId(),
-                'taskClass' => $task::class,
-                'stepClass' => $step::class,
-                'stepAttempt' => $task->getStepAttempt(),
-            ]);
+            $this->logger->info(
+                'Runner executing step [runnerId={runnerId} taskId={taskId} taskClass={taskClass} stepClass={stepClass} stepAttempt={stepAttempt}]',
+                [
+                    'runnerId' => $this->runnerConfiguration->getRunnerId(),
+                    'taskId' => $task->getId(),
+                    'taskClass' => $task::class,
+                    'stepClass' => $step::class,
+                    'stepAttempt' => $task->getStepAttempt(),
+                ],
+            );
 
             $result = $step->execute($task);
 
             $isFailedStep = $result->getStatus() === StepStatus::FAILED;
-            $logLevel = $isFailedStep ? 'error' : 'debug';
-            $logContext = [
-                'runnerId' => $this->runnerConfiguration->getRunnerId(),
-                'taskId' => $task->getId(),
-                'taskClass' => $task::class,
-                'stepClass' => $step::class,
-                'stepAttempt' => $task->getStepAttempt(),
-                'stepStatus' => $result->getStatus()->value,
-            ];
 
             if ($isFailedStep) {
-                $logContext['errorCode'] = $result->getErrorInfo()?->getCode();
-                $logContext['errorMessage'] = $result->getMessage() ?? $result->getErrorInfo()?->getMessage();
+                $this->logger->error(
+                    'Runner completed step execution [runnerId={runnerId} taskId={taskId} taskClass={taskClass} stepClass={stepClass} stepAttempt={stepAttempt} stepStatus={stepStatus} errorCode={errorCode} errorMessage={errorMessage}]',
+                    [
+                        'runnerId' => $this->runnerConfiguration->getRunnerId(),
+                        'taskId' => $task->getId(),
+                        'taskClass' => $task::class,
+                        'stepClass' => $step::class,
+                        'stepAttempt' => $task->getStepAttempt(),
+                        'stepStatus' => $result->getStatus()->value,
+                        'errorCode' => $result->getErrorInfo()?->getCode(),
+                        'errorMessage' => $result->getMessage() ?? $result->getErrorInfo()?->getMessage(),
+                    ],
+                );
+            } else {
+                $this->logger->debug(
+                    'Runner completed step execution [runnerId={runnerId} taskId={taskId} taskClass={taskClass} stepClass={stepClass} stepAttempt={stepAttempt} stepStatus={stepStatus}]',
+                    [
+                        'runnerId' => $this->runnerConfiguration->getRunnerId(),
+                        'taskId' => $task->getId(),
+                        'taskClass' => $task::class,
+                        'stepClass' => $step::class,
+                        'stepAttempt' => $task->getStepAttempt(),
+                        'stepStatus' => $result->getStatus()->value,
+                    ],
+                );
             }
-
-            $this->logger->log($logLevel, 'Runner completed step execution.', $logContext);
 
             return $result;
         } catch (\Throwable $throwable) {
-            $this->logger->error('Runner caught step exception.', [
-                'runnerId' => $this->runnerConfiguration->getRunnerId(),
-                'taskId' => $task->getId(),
-                'taskClass' => $task::class,
-                'stepClass' => $step::class,
-                'exceptionClass' => $throwable::class,
-                'errorCode' => (int) $throwable->getCode(),
-            ]);
+            $this->logger->error(
+                'Runner caught step exception [runnerId={runnerId} taskId={taskId} taskClass={taskClass} stepClass={stepClass} exceptionClass={exceptionClass} errorCode={errorCode}]',
+                [
+                    'runnerId' => $this->runnerConfiguration->getRunnerId(),
+                    'taskId' => $task->getId(),
+                    'taskClass' => $task::class,
+                    'stepClass' => $step::class,
+                    'exceptionClass' => $throwable::class,
+                    'errorCode' => (int) $throwable->getCode(),
+                ],
+            );
 
             return StepResult::failed(
                 errorInfo: new ErrorInfo(
@@ -493,14 +548,17 @@ class Runner {
                     $taskMetadata = $this->metadataResolver->resolveTaskMetadata($record->taskClass);
                     $stepMetadata = $this->metadataResolver->resolveStepMetadata($record->stepClass, $taskMetadata);
                 } catch (\Throwable $throwable) {
-                    $this->logger->error('Runner failed to resolve metadata for running task cleanup.', [
-                        'runnerId' => $this->runnerConfiguration->getRunnerId(),
-                        'taskId' => $record->taskId,
-                        'taskClass' => $record->taskClass,
-                        'stepClass' => $record->stepClass,
-                        'exceptionClass' => $throwable::class,
-                        'errorCode' => (int) $throwable->getCode(),
-                    ]);
+                    $this->logger->error(
+                        'Runner failed to resolve metadata for running task cleanup [runnerId={runnerId} taskId={taskId} taskClass={taskClass} stepClass={stepClass} exceptionClass={exceptionClass} errorCode={errorCode}]',
+                        [
+                            'runnerId' => $this->runnerConfiguration->getRunnerId(),
+                            'taskId' => $record->taskId,
+                            'taskClass' => $record->taskClass,
+                            'stepClass' => $record->stepClass,
+                            'exceptionClass' => $throwable::class,
+                            'errorCode' => (int) $throwable->getCode(),
+                        ],
+                    );
 
                     continue;
                 }
@@ -509,12 +567,15 @@ class Runner {
                     continue;
                 }
 
-                $this->logger->warning('Runner marked timed out running task as failed during cleanup.', [
-                    'runnerId' => $this->runnerConfiguration->getRunnerId(),
-                    'taskId' => $record->taskId,
-                    'taskClass' => $record->taskClass,
-                    'stepClass' => $record->stepClass,
-                ]);
+                $this->logger->warning(
+                    'Runner marked timed out running task as failed during cleanup [runnerId={runnerId} taskId={taskId} taskClass={taskClass} stepClass={stepClass}]',
+                    [
+                        'runnerId' => $this->runnerConfiguration->getRunnerId(),
+                        'taskId' => $record->taskId,
+                        'taskClass' => $record->taskClass,
+                        'stepClass' => $record->stepClass,
+                    ],
+                );
 
                 $this->queue->update(
                     $record->taskId,
@@ -538,10 +599,13 @@ class Runner {
 
     private function failClaimedRunningTasksForStopRequest(string $signalName): int {
         if ($this->connection->inTransaction()) {
-            $this->logger->warning('Runner skipped stop-request failure marking during active transaction.', [
-                'runnerId' => $this->runnerConfiguration->getRunnerId(),
-                'signal' => $signalName,
-            ]);
+            $this->logger->warning(
+                'Runner skipped stop-request failure marking during active transaction [runnerId={runnerId} signal={signal}]',
+                [
+                    'runnerId' => $this->runnerConfiguration->getRunnerId(),
+                    'signal' => $signalName,
+                ],
+            );
 
             return 0;
         }
@@ -571,12 +635,15 @@ class Runner {
                 $this->connection->rollBack();
             }
 
-            $this->logger->error('Runner failed while marking claimed running tasks after stop request.', [
-                'runnerId' => $this->runnerConfiguration->getRunnerId(),
-                'signal' => $signalName,
-                'exceptionClass' => $throwable::class,
-                'errorCode' => (int) $throwable->getCode(),
-            ]);
+            $this->logger->error(
+                'Runner failed while marking claimed running tasks after stop request [runnerId={runnerId} signal={signal} exceptionClass={exceptionClass} errorCode={errorCode}]',
+                [
+                    'runnerId' => $this->runnerConfiguration->getRunnerId(),
+                    'signal' => $signalName,
+                    'exceptionClass' => $throwable::class,
+                    'errorCode' => (int) $throwable->getCode(),
+                ],
+            );
 
             return 0;
         }
@@ -591,12 +658,15 @@ class Runner {
         if ($record->cancelRequested) {
             $message = $record->cancelReason ?? 'Cancellation requested.';
 
-            $this->logger->warning('Runner detected task cancellation request.', [
-                'runnerId' => $this->runnerConfiguration->getRunnerId(),
-                'taskId' => $record->taskId,
-                'taskClass' => $record->taskClass,
-                'stepClass' => $record->stepClass,
-            ]);
+            $this->logger->warning(
+                'Runner detected task cancellation request [runnerId={runnerId} taskId={taskId} taskClass={taskClass} stepClass={stepClass}]',
+                [
+                    'runnerId' => $this->runnerConfiguration->getRunnerId(),
+                    'taskId' => $record->taskId,
+                    'taskClass' => $record->taskClass,
+                    'stepClass' => $record->stepClass,
+                ],
+            );
 
             return StepResult::cancelled(
                 errorInfo: new ErrorInfo(499, $message),
@@ -606,12 +676,15 @@ class Runner {
         }
 
         if ($this->hasExceededMaxRuntime($record, $maxRuntime)) {
-            $this->logger->warning('Runner detected step timeout before execution.', [
-                'runnerId' => $this->runnerConfiguration->getRunnerId(),
-                'taskId' => $record->taskId,
-                'taskClass' => $record->taskClass,
-                'stepClass' => $record->stepClass,
-            ]);
+            $this->logger->warning(
+                'Runner detected step timeout before execution [runnerId={runnerId} taskId={taskId} taskClass={taskClass} stepClass={stepClass}]',
+                [
+                    'runnerId' => $this->runnerConfiguration->getRunnerId(),
+                    'taskId' => $record->taskId,
+                    'taskClass' => $record->taskClass,
+                    'stepClass' => $record->stepClass,
+                ],
+            );
 
             return StepResult::failed(
                 errorInfo: new ErrorInfo(408, self::MAX_RUNTIME_EXCEEDED_MESSAGE),
@@ -623,12 +696,15 @@ class Runner {
         $result = $this->executeStep($task, $step);
 
         if ($this->hasExceededMaxRuntime($record, $maxRuntime)) {
-            $this->logger->warning('Runner detected step timeout after execution.', [
-                'runnerId' => $this->runnerConfiguration->getRunnerId(),
-                'taskId' => $record->taskId,
-                'taskClass' => $record->taskClass,
-                'stepClass' => $record->stepClass,
-            ]);
+            $this->logger->warning(
+                'Runner detected step timeout after execution [runnerId={runnerId} taskId={taskId} taskClass={taskClass} stepClass={stepClass}]',
+                [
+                    'runnerId' => $this->runnerConfiguration->getRunnerId(),
+                    'taskId' => $record->taskId,
+                    'taskClass' => $record->taskClass,
+                    'stepClass' => $record->stepClass,
+                ],
+            );
 
             return StepResult::failed(
                 errorInfo: new ErrorInfo(
@@ -650,12 +726,15 @@ class Runner {
     private function cancelledResultFromRecord(QueueRecord $record): StepResult {
         $message = $record->cancelReason ?? 'Cancellation requested.';
 
-        $this->logger->warning('Runner detected task cancellation request.', [
-            'runnerId' => $this->runnerConfiguration->getRunnerId(),
-            'taskId' => $record->taskId,
-            'taskClass' => $record->taskClass,
-            'stepClass' => $record->stepClass,
-        ]);
+        $this->logger->warning(
+            'Runner detected task cancellation request [runnerId={runnerId} taskId={taskId} taskClass={taskClass} stepClass={stepClass}]',
+            [
+                'runnerId' => $this->runnerConfiguration->getRunnerId(),
+                'taskId' => $record->taskId,
+                'taskClass' => $record->taskClass,
+                'stepClass' => $record->stepClass,
+            ],
+        );
 
         return StepResult::cancelled(
             errorInfo: new ErrorInfo(499, $message),
@@ -665,14 +744,17 @@ class Runner {
     }
 
     private function failedResultFromNextStepException(Task $task, Step $step, \Throwable $throwable): StepResult {
-        $this->logger->error('Runner caught nextStep exception.', [
-            'runnerId' => $this->runnerConfiguration->getRunnerId(),
-            'taskId' => $task->getId(),
-            'taskClass' => $task::class,
-            'stepClass' => $step::class,
-            'exceptionClass' => $throwable::class,
-            'errorCode' => (int) $throwable->getCode(),
-        ]);
+        $this->logger->error(
+            'Runner caught nextStep exception [runnerId={runnerId} taskId={taskId} taskClass={taskClass} stepClass={stepClass} exceptionClass={exceptionClass} errorCode={errorCode}]',
+            [
+                'runnerId' => $this->runnerConfiguration->getRunnerId(),
+                'taskId' => $task->getId(),
+                'taskClass' => $task::class,
+                'stepClass' => $step::class,
+                'exceptionClass' => $throwable::class,
+                'errorCode' => (int) $throwable->getCode(),
+            ],
+        );
 
         return StepResult::failed(
             errorInfo: new ErrorInfo(
@@ -696,14 +778,17 @@ class Runner {
 
         $this->connection->beginTransaction();
 
-        $this->logger->error('Runner persisting claim failure.', [
-            'runnerId' => $this->runnerConfiguration->getRunnerId(),
-            'taskId' => $record->taskId,
-            'taskClass' => $record->taskClass,
-            'stepClass' => $record->stepClass,
-            'exceptionClass' => $throwable::class,
-            'errorCode' => $errorCode,
-        ]);
+        $this->logger->error(
+            'Runner persisting claim failure [runnerId={runnerId} taskId={taskId} taskClass={taskClass} stepClass={stepClass} exceptionClass={exceptionClass} errorCode={errorCode}]',
+            [
+                'runnerId' => $this->runnerConfiguration->getRunnerId(),
+                'taskId' => $record->taskId,
+                'taskClass' => $record->taskClass,
+                'stepClass' => $record->stepClass,
+                'exceptionClass' => $throwable::class,
+                'errorCode' => $errorCode,
+            ],
+        );
 
         try {
             $this->queue->update(
@@ -796,14 +881,17 @@ class Runner {
         \DateInterval $retryDelay,
         \DateTimeImmutable $now,
     ): array {
-        $this->logger->warning('Runner requeued failed step for retry.', [
-            'runnerId' => $this->runnerConfiguration->getRunnerId(),
-            'taskId' => $record->taskId,
-            'taskClass' => $record->taskClass,
-            'stepClass' => $record->stepClass,
-            'stepAttempt' => $record->stepAttempt + 1,
-            'retryMode' => $retryMode->value,
-        ]);
+        $this->logger->warning(
+            'Runner requeued failed step for retry [runnerId={runnerId} taskId={taskId} taskClass={taskClass} stepClass={stepClass} stepAttempt={stepAttempt} retryMode={retryMode}]',
+            [
+                'runnerId' => $this->runnerConfiguration->getRunnerId(),
+                'taskId' => $record->taskId,
+                'taskClass' => $record->taskClass,
+                'stepClass' => $record->stepClass,
+                'stepAttempt' => $record->stepAttempt + 1,
+                'retryMode' => $retryMode->value,
+            ],
+        );
 
         $changes['task_status'] = TaskStatus::QUEUED;
         $changes['step_status'] = StepStatus::QUEUED;
@@ -828,20 +916,26 @@ class Runner {
         bool $skippedPreviousStep,
     ): array {
         if ($skippedPreviousStep) {
-            $this->logger->warning('Runner skipped failed step and queued next step.', [
-                'runnerId' => $this->runnerConfiguration->getRunnerId(),
-                'taskId' => $record->taskId,
-                'taskClass' => $record->taskClass,
-                'stepClass' => $record->stepClass,
-                'nextStepClass' => $nextStep::class,
-            ]);
+            $this->logger->warning(
+                'Runner skipped failed step and queued next step [runnerId={runnerId} taskId={taskId} taskClass={taskClass} stepClass={stepClass} nextStepClass={nextStepClass}]',
+                [
+                    'runnerId' => $this->runnerConfiguration->getRunnerId(),
+                    'taskId' => $record->taskId,
+                    'taskClass' => $record->taskClass,
+                    'stepClass' => $record->stepClass,
+                    'nextStepClass' => $nextStep::class,
+                ],
+            );
         } else {
-            $this->logger->info('Runner queued next step.', [
-                'runnerId' => $this->runnerConfiguration->getRunnerId(),
-                'taskId' => $record->taskId,
-                'taskClass' => $record->taskClass,
-                'stepClass' => $nextStep::class,
-            ]);
+            $this->logger->info(
+                'Runner queued next step [runnerId={runnerId} taskId={taskId} taskClass={taskClass} stepClass={stepClass}]',
+                [
+                    'runnerId' => $this->runnerConfiguration->getRunnerId(),
+                    'taskId' => $record->taskId,
+                    'taskClass' => $record->taskClass,
+                    'stepClass' => $nextStep::class,
+                ],
+            );
         }
 
         $changes['task_status'] = TaskStatus::QUEUED;
@@ -874,12 +968,15 @@ class Runner {
 
         // SKIP on a failed final step: task succeeds, step is recorded as SKIPPED.
         if ($status === StepStatus::FAILED && $retryMode === RetryMode::SKIP) {
-            $this->logger->warning('Runner skipped failed final step and marked task as succeeded.', [
-                'runnerId' => $this->runnerConfiguration->getRunnerId(),
-                'taskId' => $record->taskId,
-                'taskClass' => $record->taskClass,
-                'stepClass' => $record->stepClass,
-            ]);
+            $this->logger->warning(
+                'Runner skipped failed final step and marked task as succeeded [runnerId={runnerId} taskId={taskId} taskClass={taskClass} stepClass={stepClass}]',
+                [
+                    'runnerId' => $this->runnerConfiguration->getRunnerId(),
+                    'taskId' => $record->taskId,
+                    'taskClass' => $record->taskClass,
+                    'stepClass' => $record->stepClass,
+                ],
+            );
 
             $changes['cleanup_at'] = $now->add(
                 $this->resolveCleanupAfterIntervalForStatus($taskMetadata, StepStatus::SUCCEEDED),
@@ -895,12 +992,15 @@ class Runner {
         );
 
         if ($status === StepStatus::SUCCEEDED) {
-            $this->logger->info('Runner marked task as succeeded.', [
-                'runnerId' => $this->runnerConfiguration->getRunnerId(),
-                'taskId' => $record->taskId,
-                'taskClass' => $record->taskClass,
-                'stepClass' => $record->stepClass,
-            ]);
+            $this->logger->info(
+                'Runner marked task as succeeded [runnerId={runnerId} taskId={taskId} taskClass={taskClass} stepClass={stepClass}]',
+                [
+                    'runnerId' => $this->runnerConfiguration->getRunnerId(),
+                    'taskId' => $record->taskId,
+                    'taskClass' => $record->taskClass,
+                    'stepClass' => $record->stepClass,
+                ],
+            );
 
             $changes['task_status'] = TaskStatus::SUCCEEDED;
             $changes['step_status'] = StepStatus::SUCCEEDED;
@@ -909,12 +1009,15 @@ class Runner {
         }
 
         if ($status === StepStatus::CANCELLED) {
-            $this->logger->warning('Runner marked task as cancelled.', [
-                'runnerId' => $this->runnerConfiguration->getRunnerId(),
-                'taskId' => $record->taskId,
-                'taskClass' => $record->taskClass,
-                'stepClass' => $record->stepClass,
-            ]);
+            $this->logger->warning(
+                'Runner marked task as cancelled [runnerId={runnerId} taskId={taskId} taskClass={taskClass} stepClass={stepClass}]',
+                [
+                    'runnerId' => $this->runnerConfiguration->getRunnerId(),
+                    'taskId' => $record->taskId,
+                    'taskClass' => $record->taskClass,
+                    'stepClass' => $record->stepClass,
+                ],
+            );
 
             $changes['task_status'] = TaskStatus::CANCELLED;
             $changes['step_status'] = StepStatus::CANCELLED;
@@ -922,14 +1025,17 @@ class Runner {
             return $changes;
         }
 
-        $this->logger->error('Runner marked task as failed.', [
-            'runnerId' => $this->runnerConfiguration->getRunnerId(),
-            'taskId' => $record->taskId,
-            'taskClass' => $record->taskClass,
-            'stepClass' => $record->stepClass,
-            'errorCode' => $result->getErrorInfo()?->getCode(),
-            'errorMessage' => $result->getMessage() ?? $result->getErrorInfo()?->getMessage(),
-        ]);
+        $this->logger->error(
+            'Runner marked task as failed [runnerId={runnerId} taskId={taskId} taskClass={taskClass} stepClass={stepClass} errorCode={errorCode} errorMessage={errorMessage}]',
+            [
+                'runnerId' => $this->runnerConfiguration->getRunnerId(),
+                'taskId' => $record->taskId,
+                'taskClass' => $record->taskClass,
+                'stepClass' => $record->stepClass,
+                'errorCode' => $result->getErrorInfo()?->getCode(),
+                'errorMessage' => $result->getMessage() ?? $result->getErrorInfo()?->getMessage(),
+            ],
+        );
 
         $changes['task_status'] = TaskStatus::FAILED;
         $changes['step_status'] = StepStatus::FAILED;

@@ -137,13 +137,16 @@ SQL,
         $now = $this->currentTimestamp();
         $startedTransaction = false;
 
-        $this->logger->info('Queue enqueue started.', [
-            'taskClass' => $task::class,
-            'stepClass' => $firstStep::class,
-            'priority' => $priority,
-            'taskStatus' => TaskStatus::QUEUED->value,
-            'stepStatus' => StepStatus::QUEUED->value,
-        ]);
+        $this->logger->info(
+            'Queue enqueue started [taskClass={taskClass} stepClass={stepClass} priority={priority} taskStatus={taskStatus} stepStatus={stepStatus}]',
+            [
+                'taskClass' => $task::class,
+                'stepClass' => $firstStep::class,
+                'priority' => $priority,
+                'taskStatus' => TaskStatus::QUEUED->value,
+                'stepStatus' => StepStatus::QUEUED->value,
+            ],
+        );
 
         if (!$this->connection->inTransaction()) {
             $this->connection->beginTransaction();
@@ -255,33 +258,39 @@ SQL;
                 $this->connection->rollBack();
             }
 
-            $this->logger->error('Queue enqueue failed.', [
-                'taskClass' => $task::class,
-                'stepClass' => $firstStep::class,
-                'priority' => $priority,
-                'exceptionClass' => $throwable::class,
-                'errorCode' => (int) $throwable->getCode(),
-            ]);
+            $this->logger->error(
+                'Queue enqueue failed [taskClass={taskClass} stepClass={stepClass} priority={priority} exceptionClass={exceptionClass} errorCode={errorCode}]',
+                [
+                    'taskClass' => $task::class,
+                    'stepClass' => $firstStep::class,
+                    'priority' => $priority,
+                    'exceptionClass' => $throwable::class,
+                    'errorCode' => (int) $throwable->getCode(),
+                ],
+            );
 
             throw $throwable;
         }
 
-        $this->logger->info('Queue enqueue completed.', [
-            'taskId' => $record->taskId,
-            'taskClass' => $record->taskClass,
-            'stepClass' => $record->stepClass,
-            'priority' => $record->priority,
-            'taskStatus' => $record->taskStatus,
-            'stepStatus' => $record->stepStatus,
-            'availableAt' => $record->availableAt->format(DATE_ATOM),
-        ]);
+        $this->logger->info(
+            'Queue enqueue completed [taskId={taskId} taskClass={taskClass} stepClass={stepClass} priority={priority} taskStatus={taskStatus} stepStatus={stepStatus} availableAt={availableAt}]',
+            [
+                'taskId' => $record->taskId,
+                'taskClass' => $record->taskClass,
+                'stepClass' => $record->stepClass,
+                'priority' => $record->priority,
+                'taskStatus' => $record->taskStatus,
+                'stepStatus' => $record->stepStatus,
+                'availableAt' => $record->availableAt->format(DATE_ATOM),
+            ],
+        );
 
         return $record;
     }
 
     public function claim(string $runnerId): ?QueueRecord {
         if ($this->connection->inTransaction()) {
-            $this->logger->error('Queue claim called inside active transaction.', [
+            $this->logger->error('Queue claim called inside active transaction [runnerId={runnerId}]', [
                 'runnerId' => $runnerId,
             ]);
 
@@ -313,7 +322,7 @@ SQL;
             if (!is_array($row)) {
                 $this->connection->commit();
 
-                $this->logger->debug('Queue claim found no available task.', [
+                $this->logger->debug('Queue claim found no available task [runnerId={runnerId}]', [
                     'runnerId' => $runnerId,
                 ]);
 
@@ -363,17 +372,20 @@ SQL;
 
             $this->connection->commit();
 
-            $this->logger->info('Queue claim succeeded.', [
-                'runnerId' => $runnerId,
-                'taskId' => $claimedRecord->taskId,
-                'taskClass' => $claimedRecord->taskClass,
-                'stepClass' => $claimedRecord->stepClass,
-                'priority' => $claimedRecord->priority,
-                'taskStatus' => $claimedRecord->taskStatus,
-                'stepStatus' => $claimedRecord->stepStatus,
-                'claimedAt' => $claimedRecord->claimedAt?->format(DATE_ATOM),
-                'claimedBy' => $claimedRecord->claimedBy,
-            ]);
+            $this->logger->info(
+                'Queue claim succeeded [runnerId={runnerId} taskId={taskId} taskClass={taskClass} stepClass={stepClass} priority={priority} taskStatus={taskStatus} stepStatus={stepStatus} claimedAt={claimedAt} claimedBy={claimedBy}]',
+                [
+                    'runnerId' => $runnerId,
+                    'taskId' => $claimedRecord->taskId,
+                    'taskClass' => $claimedRecord->taskClass,
+                    'stepClass' => $claimedRecord->stepClass,
+                    'priority' => $claimedRecord->priority,
+                    'taskStatus' => $claimedRecord->taskStatus,
+                    'stepStatus' => $claimedRecord->stepStatus,
+                    'claimedAt' => $claimedRecord->claimedAt?->format(DATE_ATOM),
+                    'claimedBy' => $claimedRecord->claimedBy,
+                ],
+            );
 
             return $claimedRecord;
         } catch (\Throwable $throwable) {
@@ -381,11 +393,14 @@ SQL;
                 $this->connection->rollBack();
             }
 
-            $this->logger->error('Queue claim failed.', [
-                'runnerId' => $runnerId,
-                'exceptionClass' => $throwable::class,
-                'errorCode' => (int) $throwable->getCode(),
-            ]);
+            $this->logger->error(
+                'Queue claim failed [runnerId={runnerId} exceptionClass={exceptionClass} errorCode={errorCode}]',
+                [
+                    'runnerId' => $runnerId,
+                    'exceptionClass' => $throwable::class,
+                    'errorCode' => (int) $throwable->getCode(),
+                ],
+            );
 
             throw $throwable;
         }
@@ -396,7 +411,7 @@ SQL;
      */
     public function update(int $taskId, array $changes, bool $notify = false): QueueRecord {
         if ($changes === []) {
-            $this->logger->error('Queue update called without changes.', [
+            $this->logger->error('Queue update called without changes [taskId={taskId}]', [
                 'taskId' => $taskId,
             ]);
 
@@ -405,11 +420,14 @@ SQL;
 
         $this->requireActiveTransaction('DatabaseQueue::update()', ['taskId' => $taskId]);
 
-        $this->logger->info('Queue update started.', [
-            'taskId' => $taskId,
-            'columns' => array_keys($changes),
-            'notify' => $notify,
-        ]);
+        $this->logger->info(
+            'Queue update started [taskId={taskId} columns={columns} notify={notify}]',
+            [
+                'taskId' => $taskId,
+                'columns' => implode(',', array_keys($changes)),
+                'notify' => $notify,
+            ],
+        );
 
         $this->lockRecord($taskId);
 
@@ -454,14 +472,17 @@ SQL;
             $this->emitNotification((string) $taskId);
         }
 
-        $this->logger->info('Queue update completed.', [
-            'taskId' => $record->taskId,
-            'taskClass' => $record->taskClass,
-            'stepClass' => $record->stepClass,
-            'taskStatus' => $record->taskStatus,
-            'stepStatus' => $record->stepStatus,
-            'notify' => $notify,
-        ]);
+        $this->logger->info(
+            'Queue update completed [taskId={taskId} taskClass={taskClass} stepClass={stepClass} taskStatus={taskStatus} stepStatus={stepStatus} notify={notify}]',
+            [
+                'taskId' => $record->taskId,
+                'taskClass' => $record->taskClass,
+                'stepClass' => $record->stepClass,
+                'taskStatus' => $record->taskStatus,
+                'stepStatus' => $record->stepStatus,
+                'notify' => $notify,
+            ],
+        );
 
         return $record;
     }
@@ -487,7 +508,7 @@ SQL,
         $deletedRows = $statement->rowCount();
 
         if ($deletedRows > 0) {
-            $this->logger->info('Queue deleted expired terminal rows.', [
+            $this->logger->info('Queue deleted expired terminal rows [deletedRows={deletedRows}]', [
                 'deletedRows' => $deletedRows,
             ]);
         }
@@ -554,10 +575,13 @@ SQL,
             'payload' => $payload,
         ]);
 
-        $this->logger->debug('Queue emitted notification.', [
-            'channel' => $this->getNotificationChannel(),
-            'payload' => $payload,
-        ]);
+        $this->logger->debug(
+            'Queue emitted notification [channel={channel} payload={payload}]',
+            [
+                'channel' => $this->getNotificationChannel(),
+                'payload' => $payload,
+            ],
+        );
     }
 
     private function fetchRecordFromStatement(\PDOStatement $statement, string $errorMessage): QueueRecord {
@@ -565,7 +589,7 @@ SQL,
             $row = $statement->fetch(\PDO::FETCH_ASSOC);
 
             if (!is_array($row)) {
-                $this->logger->error('Queue record fetch failed.', [
+                $this->logger->error('Queue record fetch failed [message={message}]', [
                     'message' => $errorMessage,
                 ]);
 
@@ -718,10 +742,19 @@ SQL,
             return;
         }
 
-        $this->logger->error('Queue operation called without active transaction.', [
-            'operation' => $operation,
-            ...$context,
-        ]);
+        $placeholders = '{operation}';
+
+        foreach (array_keys($context) as $key) {
+            $placeholders .= sprintf(' %s={%s}', $key, $key);
+        }
+
+        $this->logger->error(
+            'Queue operation called without active transaction [' . $placeholders . ']',
+            [
+                'operation' => $operation,
+                ...$context,
+            ],
+        );
 
         throw new QueueException(sprintf('%s requires an active transaction.', $operation));
     }
@@ -790,7 +823,7 @@ SQL,
             $row = $select->fetch(\PDO::FETCH_ASSOC);
 
             if (!is_array($row)) {
-                $this->logger->debug('Queue claim found no available task.', [
+                $this->logger->debug('Queue claim found no available task [runnerId={runnerId}]', [
                     'runnerId' => $runnerId,
                 ]);
 
@@ -836,17 +869,20 @@ SQL,
 
             $claimedRecord = $this->get((int) $record->taskId, false);
 
-            $this->logger->info('Queue claim succeeded.', [
-                'runnerId' => $runnerId,
-                'taskId' => $claimedRecord->taskId,
-                'taskClass' => $claimedRecord->taskClass,
-                'stepClass' => $claimedRecord->stepClass,
-                'priority' => $claimedRecord->priority,
-                'taskStatus' => $claimedRecord->taskStatus,
-                'stepStatus' => $claimedRecord->stepStatus,
-                'claimedAt' => $claimedRecord->claimedAt?->format(DATE_ATOM),
-                'claimedBy' => $claimedRecord->claimedBy,
-            ]);
+            $this->logger->info(
+                'Queue claim succeeded [runnerId={runnerId} taskId={taskId} taskClass={taskClass} stepClass={stepClass} priority={priority} taskStatus={taskStatus} stepStatus={stepStatus} claimedAt={claimedAt} claimedBy={claimedBy}]',
+                [
+                    'runnerId' => $runnerId,
+                    'taskId' => $claimedRecord->taskId,
+                    'taskClass' => $claimedRecord->taskClass,
+                    'stepClass' => $claimedRecord->stepClass,
+                    'priority' => $claimedRecord->priority,
+                    'taskStatus' => $claimedRecord->taskStatus,
+                    'stepStatus' => $claimedRecord->stepStatus,
+                    'claimedAt' => $claimedRecord->claimedAt?->format(DATE_ATOM),
+                    'claimedBy' => $claimedRecord->claimedBy,
+                ],
+            );
 
             return $claimedRecord;
         }

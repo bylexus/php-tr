@@ -36,7 +36,7 @@ final class RunnerTest extends TestCase
 
         self::assertSame($logger, $this->readPrivateProperty($runner, 'logger'));
         self::assertSame($logger, $this->readPrivateProperty($this->readPrivateProperty($runner, 'queue'), 'logger'));
-        self::assertTrue($logger->hasRecord('debug', 'Runner initialized.'));
+        self::assertTrue($logger->hasRecord('debug', 'Runner initialized [runnerId={runnerId}]'));
     }
 
     public function testRunnerDefaultsToNullLoggerWhenNoLoggerIsConfigured(): void {
