@@ -34,7 +34,7 @@ final class TaskTest extends TestCase
         $task = new QueueWorkflowTaskFixture($logger);
 
         self::assertNotNull($task->getLogger());
-        self::assertTrue($logger->hasRecord('debug', 'Task created.'));
+        self::assertTrue($logger->hasRecord('debug', 'Task {taskClass} created'));
     }
 
     public function testCancelMarksDetachedTaskAsCancelledInMemory(): void {
@@ -248,9 +248,9 @@ final class TaskTest extends TestCase
 
         self::assertNotNull($task->getLogger());
         self::assertInstanceOf(QueueWorkflowStepFixture::class, $task->actualStep());
-        self::assertTrue($logger->hasRecord('debug', 'Task hydrated from queue record.'));
+        self::assertTrue($logger->hasRecord('debug', 'Task {taskClass} hydrated from queue record [taskId={taskId} taskStatus={taskStatus} stepClass={stepClass} stepStatus={stepStatus}]'));
 
-        $taskRecord = $this->findLogRecord($logger, 'debug', 'Task hydrated from queue record.');
+        $taskRecord = $this->findLogRecord($logger, 'debug', 'Task {taskClass} hydrated from queue record [taskId={taskId} taskStatus={taskStatus} stepClass={stepClass} stepStatus={stepStatus}]');
 
         self::assertSame(42, $taskRecord['context']['taskId'] ?? null);
         self::assertSame(QueueWorkflowStepFixture::class, $taskRecord['context']['stepClass'] ?? null);

@@ -70,7 +70,7 @@ abstract class Task implements DisplayName {
             $this->setLogger($logger);
         }
 
-        $this->logger?->debug('Task created.', [
+        $this->logger?->debug('Task {taskClass} created', [
             'taskClass' => static::class,
         ]);
     }
@@ -327,10 +327,13 @@ abstract class Task implements DisplayName {
         $taskMetadata = $resolver->resolveTaskMetadata(static::class);
         $resolver->resolveStepMetadata($firstStep::class, $taskMetadata);
 
-        $this->logger?->info('Task enqueue requested.', [
-            'taskClass' => static::class,
-            'stepClass' => $firstStep::class,
-        ]);
+        $this->logger?->info(
+            'Task {taskClass} enqueue requested [stepClass={stepClass}]',
+            [
+                'taskClass' => static::class,
+                'stepClass' => $firstStep::class,
+            ],
+        );
 
         $queue = $taskEnvironment->getDatabaseQueue();
         $record = $queue->enqueue($this, $firstStep, $priority);
@@ -343,13 +346,16 @@ abstract class Task implements DisplayName {
     public function updateStep(Step $step, StepResult $result): void {
         $this->actualStep = $step;
 
-        $this->logger?->info('Task step updated.', [
-            'taskId' => $this->id,
-            'taskClass' => static::class,
-            'stepClass' => $step::class,
-            'stepStatus' => $result->getStatus()->value,
-            'stepAttempt' => $this->stepAttempt,
-        ]);
+        $this->logger?->info(
+            'Task {taskClass} step updated [taskId={taskId} stepClass={stepClass} stepStatus={stepStatus} stepAttempt={stepAttempt}]',
+            [
+                'taskId' => $this->id,
+                'taskClass' => static::class,
+                'stepClass' => $step::class,
+                'stepStatus' => $result->getStatus()->value,
+                'stepAttempt' => $this->stepAttempt,
+            ],
+        );
     }
 
     public static function fromQueueRecord(
@@ -433,13 +439,16 @@ abstract class Task implements DisplayName {
         $this->actualStep = $actualStep;
         $this->queue = $queue;
 
-        $this->logger?->debug('Task hydrated from queue record.', [
-            'taskId' => $record->taskId,
-            'taskClass' => $record->taskClass,
-            'taskStatus' => $record->taskStatus,
-            'stepClass' => $record->stepClass,
-            'stepStatus' => $record->stepStatus,
-        ]);
+        $this->logger?->debug(
+            'Task {taskClass} hydrated from queue record [taskId={taskId} taskStatus={taskStatus} stepClass={stepClass} stepStatus={stepStatus}]',
+            [
+                'taskId' => $record->taskId,
+                'taskClass' => $record->taskClass,
+                'taskStatus' => $record->taskStatus,
+                'stepClass' => $record->stepClass,
+                'stepStatus' => $record->stepStatus,
+            ],
+        );
     }
 
     protected function setStoredPayload(mixed $payload, ?AttachmentBlobStore $attachmentBlobStore = null): void {

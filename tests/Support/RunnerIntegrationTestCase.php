@@ -170,7 +170,10 @@ abstract class RunnerIntegrationTestCase extends AbstractDatabaseIntegrationTest
 
             self::assertSame(1, $runner->runSingle());
 
-            self::assertTrue($logger->hasRecord('info', 'Task enqueue requested.'));
+            self::assertTrue($logger->hasRecord(
+                'info',
+                'Task {taskClass} enqueue requested [stepClass={stepClass}]',
+            ));
             self::assertTrue($logger->hasRecord(
                 'info',
                 'Queue enqueue started [taskClass={taskClass} stepClass={stepClass} priority={priority} taskStatus={taskStatus} stepStatus={stepStatus}]',
@@ -183,7 +186,10 @@ abstract class RunnerIntegrationTestCase extends AbstractDatabaseIntegrationTest
                 'info',
                 'Runner executing step [runnerId={runnerId} taskId={taskId} taskClass={taskClass} stepClass={stepClass} stepAttempt={stepAttempt}]',
             ));
-            self::assertTrue($logger->hasRecord('info', 'Task step updated.'));
+            self::assertTrue($logger->hasRecord(
+                'info',
+                'Task {taskClass} step updated [taskId={taskId} stepClass={stepClass} stepStatus={stepStatus} stepAttempt={stepAttempt}]',
+            ));
             self::assertTrue($logger->hasRecord(
                 'info',
                 'Runner marked task as succeeded [runnerId={runnerId} taskId={taskId} taskClass={taskClass} stepClass={stepClass}]',
@@ -194,7 +200,11 @@ abstract class RunnerIntegrationTestCase extends AbstractDatabaseIntegrationTest
                 'info',
                 'Runner executing step [runnerId={runnerId} taskId={taskId} taskClass={taskClass} stepClass={stepClass} stepAttempt={stepAttempt}]',
             );
-            $stepUpdatedRecord = $this->findLogRecord($logger, 'info', 'Task step updated.');
+            $stepUpdatedRecord = $this->findLogRecord(
+                $logger,
+                'info',
+                'Task {taskClass} step updated [taskId={taskId} stepClass={stepClass} stepStatus={stepStatus} stepAttempt={stepAttempt}]',
+            );
 
             self::assertSame((int) $record->taskId, $executingRecord['context']['taskId'] ?? null);
             self::assertSame(
