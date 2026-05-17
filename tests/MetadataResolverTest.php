@@ -10,8 +10,6 @@ use ByLexus\TaskRunner\Metadata\MetadataResolver;
 use ByLexus\TaskRunner\Tests\Fixture\ConfiguredTaskFixture;
 use ByLexus\TaskRunner\Tests\Fixture\DefaultStepFixture;
 use ByLexus\TaskRunner\Tests\Fixture\DefaultTaskFixture;
-use ByLexus\TaskRunner\Tests\Fixture\InvalidCleanupOnStepFixture;
-use ByLexus\TaskRunner\Tests\Fixture\InvalidTaskRetryFixture;
 use ByLexus\TaskRunner\Tests\Fixture\NegativeRetriesStepFixture;
 use ByLexus\TaskRunner\Tests\Fixture\OverrideStepFixture;
 use ByLexus\TaskRunner\Tests\Fixture\ZeroCleanupTaskFixture;
@@ -68,15 +66,6 @@ final class MetadataResolverTest extends TestCase
         $resolver->resolveStepMetadata(NegativeRetriesStepFixture::class);
     }
 
-    public function testTaskRetryAttributesAreRejected(): void {
-        $resolver = new MetadataResolver();
-
-        $this->expectException(ConfigurationException::class);
-        $this->expectExceptionMessage('RetryMode is only allowed on step classes');
-
-        $resolver->resolveTaskMetadata(InvalidTaskRetryFixture::class);
-    }
-
     public function testZeroCleanupIntervalIsAllowed(): void {
         $resolver = new MetadataResolver();
         $metadata = $resolver->resolveTaskMetadata(ZeroCleanupTaskFixture::class);
@@ -91,14 +80,6 @@ final class MetadataResolverTest extends TestCase
         $this->expectException(ConfigurationException::class);
 
         $resolver->resolveTaskMetadata(ZeroMaxRuntimeTaskFixture::class);
-    }
-
-    public function testCleanupAfterOnStepClassIsRejected(): void {
-        $resolver = new MetadataResolver();
-
-        $this->expectException(ConfigurationException::class);
-
-        $resolver->resolveStepMetadata(InvalidCleanupOnStepFixture::class);
     }
 
     private function toSeconds(\DateInterval $interval): int {

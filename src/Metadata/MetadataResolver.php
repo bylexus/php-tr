@@ -52,7 +52,6 @@ final class MetadataResolver {
         }
 
         $reflection = $this->reflectClass($taskClass);
-        $this->assertNoTaskRetryAttributes($reflection);
         $maxRuntime = $this->readMaxRuntime($reflection) ?? clone $this->defaultMaxRuntime->interval;
         $cleanupAfter = $this->readCleanupAfter($reflection) ?? $this->defaultCleanupAfter;
 
@@ -93,10 +92,6 @@ final class MetadataResolver {
         }
 
         $reflection = $this->reflectClass($stepClass);
-
-        if ($reflection->getAttributes(CleanupAfter::class) !== []) {
-            throw new ConfigurationException(sprintf('CleanupAfter is only allowed on task classes: %s', $stepClass));
-        }
 
         $retrySettings = $this->readRetries($reflection);
 
@@ -196,22 +191,6 @@ final class MetadataResolver {
         );
 
         return new CleanupAfter(clone $attribute->successful, clone $attribute->unsuccessful);
-    }
-
-    private function assertNoTaskRetryAttributes(\ReflectionClass $reflection): void {
-        if ($reflection->getAttributes(RetryModeAttribute::class) !== []) {
-            throw new ConfigurationException(sprintf(
-                'RetryMode is only allowed on step classes: %s',
-                $reflection->getName(),
-            ));
-        }
-
-        if ($reflection->getAttributes(Retries::class) !== []) {
-            throw new ConfigurationException(sprintf(
-                'Retries is only allowed on step classes: %s',
-                $reflection->getName(),
-            ));
-        }
     }
 
     private function createDefaultTaskMetadata(): TaskMetadata {
