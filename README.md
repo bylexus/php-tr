@@ -199,6 +199,12 @@ $runner = $env->createRunner();
 $runner->runLoop();
 ```
 
+⚠️ **Note for stopping the runner**: ⚠️
+
+On systems that support signal handling with the PHP `pcntl` module, a safe shutdown is initiated on `SIGINT`  and `SIGTERM` (aka CTRL-C and soft kill). Make sure to install / enable the PHP extension `pcntl` to support signal handling.
+
+Systems that do NOT support posix / pcntl signal handling just kill the runner - even if it is working on Tasks.
+
 ## Concepts
 
 ### `Task` is the workflow instance
