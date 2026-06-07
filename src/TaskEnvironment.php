@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace ByLexus\TaskRunner;
 
-use ByLexus\TaskRunner\Enum\TaskStatus;
 use ByLexus\TaskRunner\Metadata\MetadataResolver;
 use ByLexus\TaskRunner\Queue\DatabaseQueue;
 use ByLexus\TaskRunner\Queue\QueueConfiguration;
@@ -95,11 +94,11 @@ final class TaskEnvironment {
     /**
      * @return list<Task>
      */
-    public function getTasks(?TaskStatus $taskStatus = null): array {
+    public function getTasks(?TaskFilter $filter = null): array {
         $queue = $this->getDatabaseQueue();
         $tasks = [];
 
-        foreach ($queue->find($taskStatus) as $record) {
+        foreach ($queue->find($filter) as $record) {
             $tasks[] = $this->hydrateTask($record, $queue);
         }
 

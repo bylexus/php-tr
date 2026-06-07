@@ -14,8 +14,11 @@ use ByLexus\TaskRunner\TaskEnvironment;
 use ByLexus\TaskRunner\RunnerConfiguration;
 use ByLexus\TaskRunner\Step;
 use ByLexus\TaskRunner\Task;
+use ByLexus\TaskRunner\TaskFilter;
 use ByLexus\TaskRunner\Tests\Fixture\ConstructorInjectedServiceFixture;
+use ByLexus\TaskRunner\Tests\Fixture\ConstructorInjectedStepFixture;
 use ByLexus\TaskRunner\Tests\Fixture\ConstructorInjectedTaskFixture;
+use ByLexus\TaskRunner\Tests\Fixture\QueueWorkflowStepFixture;
 use ByLexus\TaskRunner\Tests\Fixture\QueueWorkflowTaskFixture;
 use ByLexus\TaskRunner\Tests\Fixture\ServiceAndLoggerInjectedTaskFixture;
 use ByLexus\TaskRunner\Tests\Support\InMemoryContainer;
@@ -226,7 +229,7 @@ final class TaskEnvironmentTest extends TestCase
         $connection->commit();
 
         $allTasks = $context->getTasks();
-        $failedTasks = $context->getTasks(TaskStatus::FAILED);
+        $failedTasks = $context->getTasks(new TaskFilter(status: TaskStatus::FAILED));
 
         self::assertCount(3, $allTasks);
         self::assertSame(
@@ -237,6 +240,61 @@ final class TaskEnvironmentTest extends TestCase
         self::assertSame((int) $failedRecord->taskId, $failedTasks[0]->getId());
         self::assertSame(TaskStatus::FAILED, $failedTasks[0]->getStatus());
         self::assertInstanceOf(ConstructorInjectedTaskFixture::class, $allTasks[2]);
+    }
+
+    public function testTaskEnvironmentGetTasksFiltersByTaskClassStepClassAndCombinations(): void {
+        if (!in_array('sqlite', \PDO::getAvailableDrivers(), true)) {
+            self::markTestSkipped('PDO SQLite driver is not available.');
+        }
+
+        $connection = new \PDO('sqlite::memory:');
+        $configuration = new QueueConfiguration('task_queue');
+        $container = new InMemoryContainer([
+            ConstructorInjectedServiceFixture::class => new ConstructorInjectedServiceFixture('worker'),
+        ]);
+        $context = new TaskEnvironment($connection, $configuration, $container);
+        $context->getSchemaManager()->bootstrap();
+
+        $workflowRecord = $context->enqueue(new QueueWorkflowTaskFixture());
+        $injectedRecord = $context->enqueue(
+            new ConstructorInjectedTaskFixture(new ConstructorInjectedServiceFixture('worker')),
+        );
+
+        // filter by task class
+        $byTaskClass = $context->getTasks(new TaskFilter(taskClass: QueueWorkflowTaskFixture::class));
+        self::assertCount(1, $byTaskClass);
+        self::assertSame((int) $workflowRecord->taskId, $byTaskClass[0]->getId());
+
+        // filter by step class
+        $byStepClass = $context->getTasks(new TaskFilter(stepClass: QueueWorkflowStepFixture::class));
+        self::assertCount(1, $byStepClass);
+        self::assertSame((int) $workflowRecord->taskId, $byStepClass[0]->getId());
+
+        // combined AND: matching task + step
+        $byBoth = $context->getTasks(new TaskFilter(
+            taskClass: QueueWorkflowTaskFixture::class,
+            stepClass: QueueWorkflowStepFixture::class,
+        ));
+        self::assertCount(1, $byBoth);
+        self::assertSame((int) $workflowRecord->taskId, $byBoth[0]->getId());
+
+        // combined AND: mismatched task + step returns nothing
+        $byMismatch = $context->getTasks(new TaskFilter(
+            taskClass: QueueWorkflowTaskFixture::class,
+            stepClass: ConstructorInjectedStepFixture::class,
+        ));
+        self::assertCount(0, $byMismatch);
+
+        // combined status + task class
+        $byStatusAndClass = $context->getTasks(new TaskFilter(
+            status: TaskStatus::QUEUED,
+            taskClass: ConstructorInjectedTaskFixture::class,
+        ));
+        self::assertCount(1, $byStatusAndClass);
+        self::assertSame((int) $injectedRecord->taskId, $byStatusAndClass[0]->getId());
+
+        // no filter returns all
+        self::assertCount(2, $context->getTasks());
     }
 
     public function testTaskEnvironmentUsesRunnerConfigurationDependenciesWhenContextOnesAreNotProvided(): void {

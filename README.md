@@ -519,6 +519,34 @@ The same `QueueConfiguration` must be used consistently by producers, runners, a
 
 `TaskEnvironment` is the simplest way to enforce that consistency in application code because it exposes `getTask()`, `getTasks()`, `createRunner()`, and `getSchemaManager()` on the same shared queue context backed by the configured PDO connection.
 
+### Querying tasks
+
+`getTask(int $taskId)` loads a single task by its ID. `getTasks()` returns all tasks or a filtered subset:
+
+```php
+use ByLexus\TaskRunner\TaskFilter;
+use ByLexus\TaskRunner\Enum\TaskStatus;
+
+// all tasks
+$tasks = $env->getTasks();
+
+// by status
+$running = $env->getTasks(new TaskFilter(status: TaskStatus::RUNNING));
+
+// by task class
+$imports = $env->getTasks(new TaskFilter(taskClass: ImportTask::class));
+
+// by current step class
+$tasks = $env->getTasks(new TaskFilter(stepClass: SendEmailStep::class));
+
+// any combination (AND)
+$tasks = $env->getTasks(new TaskFilter(
+    status: TaskStatus::RUNNING,
+    taskClass: ImportTask::class,
+    stepClass: ProcessChunkStep::class,
+));
+```
+
 To place the queue in a specific namespace, pass the schema name as the second argument:
 
 ```php

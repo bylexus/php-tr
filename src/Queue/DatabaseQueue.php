@@ -15,6 +15,7 @@ use ByLexus\TaskRunner\Queue\Db\DatabasePlatformResolver;
 use ByLexus\TaskRunner\Exception\SerializationException;
 use ByLexus\TaskRunner\Step;
 use ByLexus\TaskRunner\Task;
+use ByLexus\TaskRunner\TaskFilter;
 use Psr\Log\LoggerInterface;
 use Psr\Log\NullLogger;
 
@@ -112,7 +113,27 @@ final class DatabaseQueue {
     /**
      * @return list<QueueRecord>
      */
-    public function find(?TaskStatus $taskStatus = null): array {
+    public function find(?TaskFilter $filter = null): array {
+        $conditions = [];
+        $params = [];
+
+        if ($filter !== null && $filter->status !== null) {
+            $conditions[] = 'task_status = :task_status';
+            $params['task_status'] = $filter->status->value;
+        }
+
+        if ($filter !== null && $filter->taskClass !== null) {
+            $conditions[] = 'task_class = :task_class';
+            $params['task_class'] = $filter->taskClass;
+        }
+
+        if ($filter !== null && $filter->stepClass !== null) {
+            $conditions[] = 'step_class = :step_class';
+            $params['step_class'] = $filter->stepClass;
+        }
+
+        $where = $conditions !== [] ? "\nWHERE " . implode("\n  AND ", $conditions) : '';
+
         $statement = $this->connection->prepare(
             sprintf(
                 <<<'SQL'
@@ -121,14 +142,10 @@ FROM %s%s
 ORDER BY priority ASC, available_at ASC, task_created_at ASC
 SQL,
                 $this->quotedTableName(),
-                $taskStatus === null ? '' : "\nWHERE task_status = :task_status",
+                $where,
             ),
         );
-        $statement->execute(
-            $taskStatus === null
-                ? []
-                : ['task_status' => $taskStatus->value],
-        );
+        $statement->execute($params);
 
         return $this->fetchRecordsFromStatement($statement);
     }
