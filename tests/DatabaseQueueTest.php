@@ -130,6 +130,33 @@ final class DatabaseQueueTest extends TestCase
         self::assertSame($record->taskId, $claimedRunning[0]->taskId);
     }
 
+    public function testAppendLogAccumulatesAndFetchLogReturnsContentOnSqlite(): void {
+        if (!in_array('sqlite', \PDO::getAvailableDrivers(), true)) {
+            self::markTestSkipped('PDO SQLite driver is not available.');
+        }
+
+        $pdo = new \PDO('sqlite::memory:');
+        $configuration = new QueueConfiguration('task_queue');
+        $taskEnvironment = new TaskEnvironment($pdo, $configuration);
+
+        $taskEnvironment->getSchemaManager()->bootstrap();
+
+        $queue = new DatabaseQueue($pdo, $configuration);
+        $record = $taskEnvironment->enqueue(new QueueWorkflowTaskFixture());
+        $taskId = (int) $record->taskId;
+
+        self::assertSame('', $queue->fetchLog($taskId));
+
+        $queue->appendLog($taskId, "first\n");
+        $queue->appendLog($taskId, "second\n");
+
+        self::assertSame("first\nsecond\n", $queue->fetchLog($taskId));
+
+        // The append-only log must not disturb regular queue-managed columns.
+        $reloaded = $queue->get($taskId);
+        self::assertSame($record->updatedAt->format('Y-m-d H:i:s.u'), $reloaded->updatedAt->format('Y-m-d H:i:s.u'));
+    }
+
     private function invokePrivateMethod(object $object, string $methodName, mixed ...$arguments): mixed {
         $reflection = new \ReflectionMethod($object, $methodName);
 

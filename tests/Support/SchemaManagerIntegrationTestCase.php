@@ -24,6 +24,7 @@ abstract class SchemaManagerIntegrationTestCase extends AbstractDatabaseIntegrat
             self::assertTrue($taskEnvironment->getSchemaManager()->blobTableExists());
             self::assertTrue($this->columnExists($pdo, $tableName, 'cleanup_at'));
             self::assertTrue($this->columnExists($pdo, $tableName, 'priority'));
+            self::assertTrue($this->columnExists($pdo, $tableName, 'log'));
             self::assertTrue($this->columnExists($pdo, $configuration->getBlobTableName(), 'content'));
             self::assertTrue($this->columnAllowsNulls($pdo, $tableName, 'payload_json'));
             self::assertTrue($this->taskIdIsIdentityColumn($pdo, $tableName));
@@ -51,6 +52,7 @@ abstract class SchemaManagerIntegrationTestCase extends AbstractDatabaseIntegrat
             $taskEnvironment->getSchemaManager()->validate();
             self::assertTrue($this->columnExists($pdo, $tableName, 'cleanup_at'));
             self::assertTrue($this->columnExists($pdo, $tableName, 'priority'));
+            self::assertTrue($this->columnExists($pdo, $tableName, 'log'));
             self::assertTrue($this->columnExists($pdo, sprintf('%s_blob_data', $tableName), 'content'));
             self::assertTrue($this->columnAllowsNulls($pdo, $tableName, 'payload_json'));
             self::assertTrue($this->taskIdIsIdentityColumn($pdo, $tableName));
@@ -79,7 +81,7 @@ abstract class SchemaManagerIntegrationTestCase extends AbstractDatabaseIntegrat
         }
     }
 
-    public function testBootstrapAddsMissingPriorityColumnToExistingQueueTable(): void {
+    public function testBootstrapAddsMissingColumnsToExistingQueueTable(): void {
         $pdo = DatabaseIntegrationConnection::requirePdo($this);
         $tableName = DatabaseIntegrationConnection::uniqueTableName();
 
@@ -89,6 +91,7 @@ abstract class SchemaManagerIntegrationTestCase extends AbstractDatabaseIntegrat
             (new TaskEnvironment($pdo, new QueueConfiguration($tableName)))->getSchemaManager()->bootstrap();
 
             self::assertTrue($this->columnExists($pdo, $tableName, 'priority'));
+            self::assertTrue($this->columnExists($pdo, $tableName, 'log'));
         } finally {
             DatabaseIntegrationConnection::dropTableIfExists($pdo, $tableName);
         }

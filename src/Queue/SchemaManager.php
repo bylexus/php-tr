@@ -45,6 +45,7 @@ final class SchemaManager {
         'cancel_requested',
         'cancel_reason',
         'updated_at',
+        'log',
     ];
 
     /** @var list<string> */

@@ -312,6 +312,33 @@ abstract class Task implements DisplayName {
         return $this;
     }
 
+    /**
+     * Appends arbitrary text to the task's append-only log column.
+     *
+     * The text is stored with a trailing newline and the current UTC timestamp,
+     * e.g. "[{DATE_W3C}]: {logString}\n". The log column is written directly and is
+     * never loaded, hydrated or stored with the regular task properties.
+     */
+    public function appendLog(string $logString): self {
+        $this->assertPersistedQueueBound(__METHOD__);
+
+        $timestamp = (new \DateTimeImmutable('now', new \DateTimeZone('UTC')))
+            ->format(\DateTimeInterface::W3C);
+
+        $this->queue->appendLog($this->id, sprintf("[%s]: %s\n", $timestamp, $logString));
+
+        return $this;
+    }
+
+    /**
+     * Returns the content of the task's append-only log column by fetching it from the database.
+     */
+    public function fetchLog(): string {
+        $this->assertPersistedQueueBound(__METHOD__);
+
+        return $this->queue->fetchLog($this->id);
+    }
+
     public function enqueue(TaskEnvironment $taskEnvironment, int $priority = self::PRIO_NORMAL): QueueRecord {
         self::assertValidPriority($priority);
 

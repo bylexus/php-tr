@@ -103,7 +103,8 @@ CREATE TABLE IF NOT EXISTS %s (
     last_error_message TEXT NULL,
     cancel_requested INTEGER NOT NULL DEFAULT 0,
     cancel_reason TEXT NULL,
-    updated_at TEXT NOT NULL
+    updated_at TEXT NOT NULL,
+    log TEXT NULL
 )
 SQL,
             $this->queueTableName($configuration),

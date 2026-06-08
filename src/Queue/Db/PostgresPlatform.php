@@ -64,7 +64,8 @@ CREATE TABLE IF NOT EXISTS %s (
     last_error_message TEXT NULL,
     cancel_requested BOOLEAN NOT NULL DEFAULT FALSE,
     cancel_reason TEXT NULL,
-    updated_at TIMESTAMPTZ NOT NULL
+    updated_at TIMESTAMPTZ NOT NULL,
+    log TEXT NULL
 )
 SQL,
             $this->queueTableName($configuration),
@@ -93,6 +94,13 @@ SQL,
     protected function priorityMigrationStatement(QueueConfiguration $configuration): ?string {
         return sprintf(
             'ALTER TABLE %s ADD COLUMN IF NOT EXISTS priority INTEGER NOT NULL DEFAULT 3',
+            $this->queueTableName($configuration),
+        );
+    }
+
+    protected function logMigrationStatement(QueueConfiguration $configuration): ?string {
+        return sprintf(
+            'ALTER TABLE %s ADD COLUMN IF NOT EXISTS log TEXT NULL',
             $this->queueTableName($configuration),
         );
     }

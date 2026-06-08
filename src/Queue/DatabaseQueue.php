@@ -504,6 +504,47 @@ SQL;
         return $record;
     }
 
+    /**
+     * Appends text to the append-only log column of a task using a single atomic statement.
+     *
+     * The log column is never hydrated or stored with the regular queue record handling;
+     * this method writes to it directly and leaves all other columns (including updated_at) untouched.
+     */
+    public function appendLog(int $taskId, string $text): void {
+        $statement = $this->connection->prepare(
+            sprintf(
+                'UPDATE %s SET %s WHERE task_id = :task_id',
+                $this->quotedTableName(),
+                $this->platform->appendLogExpression('value_log'),
+            ),
+        );
+        $statement->execute([
+            'task_id' => $taskId,
+            'value_log' => $text,
+        ]);
+    }
+
+    /**
+     * Returns the content of the append-only log column for a task, or an empty string when it is empty.
+     */
+    public function fetchLog(int $taskId): string {
+        $statement = $this->connection->prepare(
+            sprintf(
+                'SELECT log FROM %s WHERE task_id = :task_id',
+                $this->quotedTableName(),
+            ),
+        );
+        $statement->execute(['task_id' => $taskId]);
+
+        try {
+            $log = $statement->fetchColumn();
+        } finally {
+            $statement->closeCursor();
+        }
+
+        return is_string($log) ? $log : '';
+    }
+
     public function deleteExpired(): int {
         $statement = $this->connection->prepare(
             sprintf(

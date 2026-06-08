@@ -110,6 +110,61 @@ final class TaskTest extends TestCase
         $task->persistPayload();
     }
 
+    public function testAppendLogStoresTimestampedLinesAndFetchLogReturnsThem(): void {
+        $environment = $this->createSqliteTaskEnvironment();
+        $record = (new QueueWorkflowTaskFixture())->enqueue($environment);
+
+        self::assertNotNull($record->taskId);
+
+        $task = $environment->getTask((int) $record->taskId);
+
+        self::assertSame('', $task->fetchLog());
+
+        $task->appendLog('first entry');
+        $task->appendLog('second entry');
+
+        $log = $task->fetchLog();
+        $lines = explode("\n", $log);
+
+        // Trailing newline on each entry yields a trailing empty element.
+        self::assertSame('', array_pop($lines));
+        self::assertCount(2, $lines);
+        self::assertMatchesRegularExpression(
+            '/^\[\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\+00:00\]: first entry$/',
+            $lines[0],
+        );
+        self::assertMatchesRegularExpression(
+            '/^\[\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\+00:00\]: second entry$/',
+            $lines[1],
+        );
+
+        // The log column is never hydrated with the regular task state.
+        $reloaded = $environment->getTask((int) $record->taskId);
+        self::assertSame($log, $reloaded->fetchLog());
+    }
+
+    public function testAppendLogFailsForDetachedTask(): void {
+        $task = new QueueWorkflowTaskFixture();
+
+        $this->expectException(ConfigurationException::class);
+        $this->expectExceptionMessage(
+            'ByLexus\\TaskRunner\\Task::appendLog requires an enqueued task bound to a database queue.',
+        );
+
+        $task->appendLog('nope');
+    }
+
+    public function testFetchLogFailsForDetachedTask(): void {
+        $task = new QueueWorkflowTaskFixture();
+
+        $this->expectException(ConfigurationException::class);
+        $this->expectExceptionMessage(
+            'ByLexus\\TaskRunner\\Task::fetchLog requires an enqueued task bound to a database queue.',
+        );
+
+        $task->fetchLog();
+    }
+
     public function testTaskCanBeReconstitutedFromQueueRecord(): void {
         $record = new QueueRecord(
             42,

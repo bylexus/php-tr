@@ -21,6 +21,7 @@ final class SchemaManagerTest extends TestCase
         self::assertStringContainsString('CREATE TABLE IF NOT EXISTS "custom_queue_blob_data"', $ddl);
         self::assertStringContainsString('cleanup_at TIMESTAMPTZ NULL', $ddl);
         self::assertStringContainsString('priority INTEGER NOT NULL DEFAULT 3', $ddl);
+        self::assertStringContainsString('log TEXT NULL', $ddl);
         self::assertStringContainsString('payload_json JSONB NULL', $ddl);
         self::assertStringContainsString('content BYTEA NOT NULL', $ddl);
         self::assertStringContainsString('CREATE INDEX IF NOT EXISTS "custom_queue_cleanup_at_idx"', $ddl);
@@ -75,6 +76,7 @@ final class SchemaManagerTest extends TestCase
         self::assertStringNotContainsString('CREATE SCHEMA', $ddl);
         self::assertStringContainsString('CREATE TABLE IF NOT EXISTS `custom_app`.`custom_queue`', $ddl);
         self::assertStringContainsString('task_id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY', $ddl);
+        self::assertStringContainsString('log LONGTEXT NULL', $ddl);
         self::assertStringContainsString('payload_json JSON NULL', $ddl);
         self::assertStringContainsString('content LONGBLOB NOT NULL', $ddl);
         self::assertStringContainsString('CREATE INDEX `custom_queue_cleanup_at_idx`', $ddl);
@@ -89,6 +91,7 @@ final class SchemaManagerTest extends TestCase
 
         self::assertStringContainsString('CREATE TABLE IF NOT EXISTS "custom_queue"', $ddl);
         self::assertStringContainsString('task_id INTEGER PRIMARY KEY AUTOINCREMENT', $ddl);
+        self::assertStringContainsString('log TEXT NULL', $ddl);
         self::assertStringContainsString('payload_json TEXT NULL', $ddl);
         self::assertStringContainsString('content BLOB NOT NULL', $ddl);
         self::assertStringContainsString('cancel_requested INTEGER NOT NULL DEFAULT 0', $ddl);

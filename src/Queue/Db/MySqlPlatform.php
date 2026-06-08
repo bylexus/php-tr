@@ -48,7 +48,8 @@ CREATE TABLE IF NOT EXISTS %s (
     last_error_message TEXT NULL,
     cancel_requested BOOLEAN NOT NULL DEFAULT FALSE,
     cancel_reason TEXT NULL,
-    updated_at DATETIME(6) NOT NULL
+    updated_at DATETIME(6) NOT NULL,
+    log LONGTEXT NULL
 ) ENGINE=InnoDB
 SQL,
             $this->queueTableName($configuration),
@@ -79,6 +80,17 @@ SQL,
             'ALTER TABLE %s ADD COLUMN priority INTEGER NOT NULL DEFAULT 3',
             $this->queueTableName($configuration),
         );
+    }
+
+    protected function logMigrationStatement(QueueConfiguration $configuration): ?string {
+        return sprintf(
+            'ALTER TABLE %s ADD COLUMN log LONGTEXT NULL',
+            $this->queueTableName($configuration),
+        );
+    }
+
+    public function appendLogExpression(string $parameterName): string {
+        return sprintf('log = CONCAT(COALESCE(log, \'\'), :%s)', $parameterName);
     }
 
     protected function supportsCreateIndexIfNotExists(): bool {

@@ -81,6 +81,14 @@ abstract class AbstractDatabasePlatform implements DatabasePlatform {
                     $statements[] = $migrationStatement;
                 }
             }
+
+            if (!in_array('log', $columnNames, true)) {
+                $migrationStatement = $this->logMigrationStatement($configuration);
+
+                if ($migrationStatement !== null) {
+                    $statements[] = $migrationStatement;
+                }
+            }
         }
 
         if (!$blobTableExists) {
@@ -164,6 +172,17 @@ abstract class AbstractDatabasePlatform implements DatabasePlatform {
 
     protected function priorityMigrationStatement(QueueConfiguration $configuration): ?string {
         return null;
+    }
+
+    protected function logMigrationStatement(QueueConfiguration $configuration): ?string {
+        return sprintf(
+            'ALTER TABLE %s ADD COLUMN log TEXT NULL',
+            $this->queueTableName($configuration),
+        );
+    }
+
+    public function appendLogExpression(string $parameterName): string {
+        return sprintf("log = COALESCE(log, '') || :%s", $parameterName);
     }
 
     protected function supportsCreateIndexIfNotExists(): bool {

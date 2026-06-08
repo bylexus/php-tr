@@ -402,6 +402,28 @@ final class ProcessLargeImportStep implements Step {
 }
 ```
 
+### Append-only task log
+
+Each task row carries a dedicated `log` text column for arbitrary, append-only log output (progress notes,
+external system responses, debugging breadcrumbs). It is deliberately kept separate from the payload and the
+regular task state: the log is **never** loaded, hydrated or stored with the other task properties, so long
+logs can accumulate without being carried around during queue management.
+
+Use it from inside a step (or anywhere the task is bound to the queue):
+
+```php
+// Appends "[2026-06-08T12:34:56+00:00]: Imported chunk 101\n" to the log column.
+// Each entry gets a trailing newline and the current UTC timestamp (W3C format).
+$task->appendLog(sprintf('Imported chunk %d', $chunkId));
+
+// Read the full accumulated log back from the database (empty string when nothing was logged):
+$log = $task->fetchLog();
+```
+
+`appendLog()` writes with a single atomic statement and does not touch any other column (not even
+`updated_at`), so concurrent appends on the same task are safe. Both methods require a task that has been
+enqueued and is bound to the database queue.
+
 ### File attachments in payloads
 
 Often you want to use files as part of your workflow (e.g. send emails with attachments). The library allows you to store needed files as part of the payload in a separate table.

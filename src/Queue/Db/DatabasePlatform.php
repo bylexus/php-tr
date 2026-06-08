@@ -36,6 +36,11 @@ interface DatabasePlatform {
         QueueConfiguration $configuration,
     ): array;
 
+    /**
+     * Returns a SQL assignment that appends the given bound parameter to the append-only log column.
+     */
+    public function appendLogExpression(string $parameterName): string;
+
     public function tableExists(\PDO $connection, QueueConfiguration $configuration, string $tableName): bool;
 
     /** @return list<string> */
