@@ -18,6 +18,7 @@ use ByLexus\TaskRunner\Tests\Support\AbstractDatabaseIntegrationTestCase;
 use ByLexus\TaskRunner\Tests\Fixture\ConstructorInjectedServiceFixture;
 use ByLexus\TaskRunner\Tests\Fixture\ConstructorInjectedTaskFixture;
 use ByLexus\TaskRunner\Tests\Fixture\SignalControlledShutdownTaskFixture;
+use ByLexus\TaskRunner\Tests\Fixture\AfterTaskHookTaskFixture;
 use ByLexus\TaskRunner\Tests\Fixture\AttachmentRoundtripTaskFixture;
 use ByLexus\TaskRunner\Tests\Fixture\CancellingTaskFixture;
 use ByLexus\TaskRunner\Tests\Fixture\PayloadHandoffTaskFixture;
@@ -1144,6 +1145,235 @@ abstract class RunnerIntegrationTestBase extends AbstractDatabaseIntegrationTest
             self::assertSame('499', $row['last_error_code']);
             self::assertSame('Cancelled during execution.', $row['last_error_message']);
         } finally {
+            DatabaseIntegrationConnection::dropTableIfExists($pdo, $tableName);
+        }
+    }
+
+    public function testRunSingleInvokesAfterTaskHookOnSuccess(): void {
+        $pdo = DatabaseIntegrationConnection::requirePdo($this);
+        $tableName = DatabaseIntegrationConnection::uniqueTableName();
+        AfterTaskHookTaskFixture::reset();
+
+        try {
+            $configuration = new QueueConfiguration($tableName);
+            $taskEnvironment = new TaskEnvironment($pdo, $configuration);
+            $taskEnvironment->getSchemaManager()->bootstrap();
+
+            $task = new AfterTaskHookTaskFixture();
+            $task->setPayload(['outcome' => 'succeed']);
+            $record = $task->enqueue($taskEnvironment);
+
+            self::assertNotNull($record->taskId);
+
+            $runner = $this->createRunner(
+                $pdo,
+                $configuration,
+                new RunnerConfiguration('runner-after-task-success'),
+            );
+
+            self::assertSame(1, $runner->runSingle());
+
+            $row = $this->fetchTaskRow($pdo, $tableName, (int) $record->taskId);
+            self::assertSame(TaskStatus::SUCCEEDED->value, $row['task_status']);
+
+            self::assertCount(1, AfterTaskHookTaskFixture::$invocations);
+            self::assertSame(
+                [
+                    'status' => TaskStatus::SUCCEEDED->value,
+                    'taskId' => (int) $record->taskId,
+                    'persistedStatus' => TaskStatus::SUCCEEDED->value,
+                ],
+                AfterTaskHookTaskFixture::$invocations[0],
+            );
+        } finally {
+            AfterTaskHookTaskFixture::reset();
+            DatabaseIntegrationConnection::dropTableIfExists($pdo, $tableName);
+        }
+    }
+
+    public function testRunSingleInvokesAfterTaskHookOnFailure(): void {
+        $pdo = DatabaseIntegrationConnection::requirePdo($this);
+        $tableName = DatabaseIntegrationConnection::uniqueTableName();
+        AfterTaskHookTaskFixture::reset();
+
+        try {
+            $configuration = new QueueConfiguration($tableName);
+            $taskEnvironment = new TaskEnvironment($pdo, $configuration);
+            $taskEnvironment->getSchemaManager()->bootstrap();
+
+            $task = new AfterTaskHookTaskFixture();
+            $task->setPayload(['outcome' => 'fail']);
+            $record = $task->enqueue($taskEnvironment);
+
+            self::assertNotNull($record->taskId);
+
+            $runner = $this->createRunner(
+                $pdo,
+                $configuration,
+                new RunnerConfiguration('runner-after-task-failure'),
+            );
+
+            self::assertSame(1, $runner->runSingle());
+
+            $row = $this->fetchTaskRow($pdo, $tableName, (int) $record->taskId);
+            self::assertSame(TaskStatus::FAILED->value, $row['task_status']);
+
+            self::assertCount(1, AfterTaskHookTaskFixture::$invocations);
+            self::assertSame(TaskStatus::FAILED->value, AfterTaskHookTaskFixture::$invocations[0]['status']);
+            self::assertSame(
+                TaskStatus::FAILED->value,
+                AfterTaskHookTaskFixture::$invocations[0]['persistedStatus'],
+            );
+        } finally {
+            AfterTaskHookTaskFixture::reset();
+            DatabaseIntegrationConnection::dropTableIfExists($pdo, $tableName);
+        }
+    }
+
+    public function testRunSingleInvokesAfterTaskHookOnceWhenStepCancelsDuringExecution(): void {
+        $pdo = DatabaseIntegrationConnection::requirePdo($this);
+        $tableName = DatabaseIntegrationConnection::uniqueTableName();
+        AfterTaskHookTaskFixture::reset();
+
+        try {
+            $configuration = new QueueConfiguration($tableName);
+            $taskEnvironment = new TaskEnvironment($pdo, $configuration);
+            $taskEnvironment->getSchemaManager()->bootstrap();
+
+            $task = new AfterTaskHookTaskFixture();
+            $task->setPayload(['outcome' => 'cancel']);
+            $record = $task->enqueue($taskEnvironment);
+
+            self::assertNotNull($record->taskId);
+
+            $runner = $this->createRunner(
+                $pdo,
+                $configuration,
+                new RunnerConfiguration('runner-after-task-cancel'),
+            );
+
+            self::assertSame(1, $runner->runSingle());
+
+            $row = $this->fetchTaskRow($pdo, $tableName, (int) $record->taskId);
+            self::assertSame(TaskStatus::CANCELLED->value, $row['task_status']);
+
+            // Single fire: cancel() during execution leaves finalization to the
+            // runner, which dispatches the hook once.
+            self::assertCount(1, AfterTaskHookTaskFixture::$invocations);
+            self::assertSame(TaskStatus::CANCELLED->value, AfterTaskHookTaskFixture::$invocations[0]['status']);
+        } finally {
+            AfterTaskHookTaskFixture::reset();
+            DatabaseIntegrationConnection::dropTableIfExists($pdo, $tableName);
+        }
+    }
+
+    public function testRunSingleSurvivesThrowingAfterTaskHook(): void {
+        $pdo = DatabaseIntegrationConnection::requirePdo($this);
+        $tableName = DatabaseIntegrationConnection::uniqueTableName();
+        AfterTaskHookTaskFixture::reset();
+
+        try {
+            $configuration = new QueueConfiguration($tableName);
+            $logger = new SpyLogger();
+            $taskEnvironment = new TaskEnvironment($pdo, $configuration);
+            $taskEnvironment->getSchemaManager()->bootstrap();
+
+            $task = new AfterTaskHookTaskFixture();
+            $task->setPayload(['outcome' => 'succeed', 'throwInHook' => true]);
+            $record = $task->enqueue($taskEnvironment);
+
+            self::assertNotNull($record->taskId);
+
+            $runner = $this->createRunner(
+                $pdo,
+                $configuration,
+                new RunnerConfiguration('runner-after-task-throw', false, 30, null, $logger),
+            );
+
+            // A throwing hook must not break the runner or the persisted state.
+            self::assertSame(1, $runner->runSingle());
+
+            $row = $this->fetchTaskRow($pdo, $tableName, (int) $record->taskId);
+            self::assertSame(TaskStatus::SUCCEEDED->value, $row['task_status']);
+
+            self::assertCount(1, AfterTaskHookTaskFixture::$invocations);
+            self::assertTrue($logger->hasRecord(
+                'error',
+                'Task afterTask hook threw an exception [taskId={taskId} taskClass={taskClass} taskStatus={taskStatus} exceptionClass={exceptionClass} errorCode={errorCode} errorMessage={errorMessage}]',
+            ));
+        } finally {
+            AfterTaskHookTaskFixture::reset();
+            DatabaseIntegrationConnection::dropTableIfExists($pdo, $tableName);
+        }
+    }
+
+    public function testRunSingleDoesNotInvokeAfterTaskHookForTaskWithoutOverride(): void {
+        $pdo = DatabaseIntegrationConnection::requirePdo($this);
+        $tableName = DatabaseIntegrationConnection::uniqueTableName();
+        AfterTaskHookTaskFixture::reset();
+
+        try {
+            $configuration = new QueueConfiguration($tableName);
+            $taskEnvironment = new TaskEnvironment($pdo, $configuration);
+            $taskEnvironment->getSchemaManager()->bootstrap();
+
+            $task = new QueueWorkflowTaskFixture();
+            $task->setPayload(['job' => 'no-hook']);
+            $record = $task->enqueue($taskEnvironment);
+
+            self::assertNotNull($record->taskId);
+
+            $runner = $this->createRunner(
+                $pdo,
+                $configuration,
+                new RunnerConfiguration('runner-after-task-none'),
+            );
+
+            self::assertSame(1, $runner->runSingle());
+
+            $row = $this->fetchTaskRow($pdo, $tableName, (int) $record->taskId);
+            self::assertSame(TaskStatus::SUCCEEDED->value, $row['task_status']);
+            self::assertSame([], AfterTaskHookTaskFixture::$invocations);
+        } finally {
+            AfterTaskHookTaskFixture::reset();
+            DatabaseIntegrationConnection::dropTableIfExists($pdo, $tableName);
+        }
+    }
+
+    public function testCancelInvokesAfterTaskHookWhenTaskIsFinalizedBeforeExecution(): void {
+        $pdo = DatabaseIntegrationConnection::requirePdo($this);
+        $tableName = DatabaseIntegrationConnection::uniqueTableName();
+        AfterTaskHookTaskFixture::reset();
+
+        try {
+            $configuration = new QueueConfiguration($tableName);
+            $taskEnvironment = new TaskEnvironment($pdo, $configuration);
+            $taskEnvironment->getSchemaManager()->bootstrap();
+
+            $task = new AfterTaskHookTaskFixture();
+            $task->setPayload(['outcome' => 'succeed']);
+            $record = $task->enqueue($taskEnvironment);
+
+            self::assertNotNull($record->taskId);
+
+            // Cancelling a queued (not running) task finalizes it immediately, so
+            // cancel() itself dispatches the hook.
+            $task->cancel('Cancelled before execution.');
+
+            self::assertCount(1, AfterTaskHookTaskFixture::$invocations);
+            self::assertSame(TaskStatus::CANCELLED->value, AfterTaskHookTaskFixture::$invocations[0]['status']);
+
+            $runner = $this->createRunner(
+                $pdo,
+                $configuration,
+                new RunnerConfiguration('runner-after-task-cancel-before'),
+            );
+
+            // Already terminal: the runner does not pick it up, so no second fire.
+            self::assertSame(0, $runner->runSingle());
+            self::assertCount(1, AfterTaskHookTaskFixture::$invocations);
+        } finally {
+            AfterTaskHookTaskFixture::reset();
             DatabaseIntegrationConnection::dropTableIfExists($pdo, $tableName);
         }
     }

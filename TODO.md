@@ -1,6 +1,21 @@
 # php-tr TODO
 
-- after job hook (also after cancel / failure)
+## Feature: after-task hook [DONE]
+
+When a task reaches a terminal state (succeeded, failed or cancelled) and that
+state has been persisted, an implementing Task class can override an `afterTask()`
+method that is then invoked. This allows final / after-task code to run
+independent of the outcome (e.g. sending a result email).
+
+- add `protected afterTask(TaskStatus $status)` no-op to the `Task` base class,
+  overridable by subclasses; read final state via the regular getters.
+- a public `dispatchAfterTaskHook()` invokes it for terminal states only and
+  swallows/logs hook exceptions so a failing hook never disrupts the runner or
+  the persisted state.
+- fire it after the terminal commit on every terminal path: normal run,
+  hydration/claim failure, max-runtime timeout cleanup, stop-request shutdown,
+  and external `cancel()`.
+- add an example in the README.md in an appropriate section.
 
 ## Feature: separate log column [DONE]
 

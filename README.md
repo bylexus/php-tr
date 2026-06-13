@@ -424,6 +424,45 @@ $log = $task->fetchLog();
 `updated_at`), so concurrent appends on the same task are safe. Both methods require a task that has been
 enqueued and is bound to the database queue.
 
+### After-task hook
+
+Override the optional `afterTask()` method on your task to run finalization code **after the task reached a
+terminal state and that state has been persisted**. It fires for every terminal outcome — `SUCCEEDED`,
+`FAILED` and `CANCELLED` — so it is the right place for "always run, regardless of result" logic such as
+sending a result email or notifying an external system.
+
+```php
+use ByLexus\TaskRunner\Enum\TaskStatus;
+use ByLexus\TaskRunner\Step;
+use ByLexus\TaskRunner\Task;
+
+class ImportUserProfileTask extends Task {
+    public function nextStep(?Step $actStep = null): ?Step {
+        return $actStep === null ? new ImportStep() : null;
+    }
+
+    protected function afterTask(TaskStatus $status): void {
+        // Runs once the final state is committed. Read it via the regular getters:
+        $this->mailer->send(sprintf(
+            'Import %s: %s',
+            $status->value,
+            $this->getLastErrorMessage() ?? 'ok',
+        ));
+    }
+}
+```
+
+Notes:
+
+- The hook runs **after** the terminal database commit, so `getStatus()`, `getResult()`, `getError()` and
+  `getLastErrorMessage()` reflect the persisted final state.
+- It fires on every terminal path: a normal run, a max-runtime timeout, a stop-request shutdown, and an
+  explicit `cancel()`.
+- Exceptions thrown inside `afterTask()` are caught and logged; they never affect the already-persisted task
+  state nor disrupt the runner.
+- The hook is skipped only when the task object cannot be instantiated at all (e.g. an unrecoverable
+  hydration failure of the task class itself).
+
 ### File attachments in payloads
 
 Often you want to use files as part of your workflow (e.g. send emails with attachments). The library allows you to store needed files as part of the payload in a separate table.

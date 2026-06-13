@@ -192,6 +192,13 @@ abstract class Task implements DisplayName {
             $payload = $this->payload;
             $this->hydrateFromQueueRecord($record, $this->actualStep, $this->queue->getAttachmentBlobStore(), $this->queue);
             $this->payload = $payload;
+
+            // Fire the after-task hook only when this call finalized the task to a
+            // terminal CANCELLED state. A cancel-while-running task is finalized
+            // later by the Runner, which dispatches the hook there.
+            if (array_key_exists('task_finished_at', $changes)) {
+                $this->dispatchAfterTaskHook(TaskStatus::CANCELLED);
+            }
         } catch (\Throwable $throwable) {
             if ($startedTransaction && $connection->inTransaction()) {
                 $connection->rollBack();
@@ -368,6 +375,55 @@ abstract class Task implements DisplayName {
         $this->hydrateFromQueueRecord($record, $firstStep, $queue->getAttachmentBlobStore(), $queue);
 
         return $record;
+    }
+
+    /**
+     * Lifecycle hook invoked after the task reached a terminal state
+     * (SUCCEEDED, FAILED or CANCELLED) and that final state has been persisted.
+     *
+     * Override this method in a task subclass to run finalization code that must
+     * execute independent of the outcome, e.g. sending a result email. Read the
+     * final state through the regular getters ($this->getStatus(), getResult(),
+     * getError(), getLastErrorMessage(), ...). The default implementation is a
+     * no-op.
+     *
+     * Exceptions thrown here are caught and logged by dispatchAfterTaskHook();
+     * they never affect the already-persisted task state.
+     */
+    protected function afterTask(TaskStatus $status): void {
+    }
+
+    /**
+     * Invokes the afterTask() hook for terminal task states.
+     *
+     * Used by the Runner (and by cancel()) once the final state is committed.
+     * Non-terminal states are ignored and hook exceptions are swallowed so a
+     * failing hook never disrupts the runner or the persisted state.
+     */
+    public function dispatchAfterTaskHook(TaskStatus $status): void {
+        if (
+            $status !== TaskStatus::SUCCEEDED
+            && $status !== TaskStatus::FAILED
+            && $status !== TaskStatus::CANCELLED
+        ) {
+            return;
+        }
+
+        try {
+            $this->afterTask($status);
+        } catch (\Throwable $throwable) {
+            $this->logger?->error(
+                'Task afterTask hook threw an exception [taskId={taskId} taskClass={taskClass} taskStatus={taskStatus} exceptionClass={exceptionClass} errorCode={errorCode} errorMessage={errorMessage}]',
+                [
+                    'taskId' => $this->id,
+                    'taskClass' => static::class,
+                    'taskStatus' => $status->value,
+                    'exceptionClass' => $throwable::class,
+                    'errorCode' => (int) $throwable->getCode(),
+                    'errorMessage' => $throwable->getMessage(),
+                ],
+            );
+        }
     }
 
     public function updateStep(Step $step, StepResult $result): void {

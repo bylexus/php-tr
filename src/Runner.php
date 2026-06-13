@@ -416,6 +416,7 @@ class Runner {
             );
             $this->queue->update((int) $record->taskId, $changes, true);
             $this->connection->commit();
+            $this->dispatchAfterTaskHook((int) $record->taskId);
         } catch (\Throwable $throwable) {
             if ($this->connection->inTransaction()) {
                 $this->connection->rollBack();
@@ -434,6 +435,51 @@ class Runner {
             );
 
             throw $throwable;
+        }
+    }
+
+    /**
+     * Best-effort dispatch of a task's afterTask() hook after its terminal state
+     * has been committed.
+     *
+     * Fetches the freshly persisted record, hydrates the task and invokes the
+     * hook for terminal states only. Hydration failures (e.g. a task class that
+     * cannot be instantiated) are logged and skipped; the hook itself never
+     * throws out of here because Task::dispatchAfterTaskHook() swallows errors.
+     */
+    private function dispatchAfterTaskHook(int $taskId): void {
+        try {
+            $record = $this->queue->get($taskId);
+            $status = TaskStatus::from($record->taskStatus);
+
+            if (
+                $status !== TaskStatus::SUCCEEDED
+                && $status !== TaskStatus::FAILED
+                && $status !== TaskStatus::CANCELLED
+            ) {
+                return;
+            }
+
+            $task = Task::fromQueueRecord(
+                $record,
+                $this->runnerConfiguration->getContainer(),
+                $this->logger,
+                $this->queue->getAttachmentBlobStore(),
+                $this->queue,
+            );
+            $task->setLogger($this->logger);
+            $task->dispatchAfterTaskHook($status);
+        } catch (\Throwable $throwable) {
+            $this->logger->error(
+                'Runner could not dispatch afterTask hook [runnerId={runnerId} taskId={taskId} exceptionClass={exceptionClass} errorCode={errorCode} errorMessage={errorMessage}]',
+                [
+                    'runnerId' => $this->runnerConfiguration->getRunnerId(),
+                    'taskId' => $taskId,
+                    'exceptionClass' => $throwable::class,
+                    'errorCode' => (int) $throwable->getCode(),
+                    'errorMessage' => $throwable->getMessage(),
+                ],
+            );
         }
     }
 
@@ -538,6 +584,7 @@ class Runner {
 
         try {
             $timedOutClaims = 0;
+            $finalizedTaskIds = [];
 
             foreach ($this->queue->findStartedRunningTasks() as $record) {
                 if ($record->taskId === null || $record->stepClass === null) {
@@ -582,10 +629,15 @@ class Runner {
                     $this->changesForExpiredRunningTask($taskMetadata),
                     true,
                 );
+                $finalizedTaskIds[] = $record->taskId;
                 $timedOutClaims++;
             }
 
             $this->connection->commit();
+
+            foreach ($finalizedTaskIds as $taskId) {
+                $this->dispatchAfterTaskHook($taskId);
+            }
 
             return $timedOutClaims;
         } catch (\Throwable $throwable) {
@@ -614,6 +666,7 @@ class Runner {
 
         try {
             $failedClaims = 0;
+            $finalizedTaskIds = [];
 
             foreach ($this->queue->findClaimedRunningTasks($this->runnerConfiguration->getRunnerId()) as $record) {
                 if ($record->taskId === null) {
@@ -624,10 +677,15 @@ class Runner {
                     $record->taskId,
                     $this->changesForStopRequestedRunningTask($record, $signalName),
                 );
+                $finalizedTaskIds[] = $record->taskId;
                 $failedClaims++;
             }
 
             $this->connection->commit();
+
+            foreach ($finalizedTaskIds as $taskId) {
+                $this->dispatchAfterTaskHook($taskId);
+            }
 
             return $failedClaims;
         } catch (\Throwable $throwable) {
@@ -813,6 +871,7 @@ class Runner {
                 true,
             );
             $this->connection->commit();
+            $this->dispatchAfterTaskHook((int) $record->taskId);
         } catch (\Throwable $updateThrowable) {
             if ($this->connection->inTransaction()) {
                 $this->connection->rollBack();
