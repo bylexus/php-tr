@@ -27,16 +27,6 @@ final class PostgresPlatform extends AbstractDatabasePlatform {
         return $configuration->getSchemaName() === null ? 'current_schema()' : ':schema_name';
     }
 
-    protected function schemaStatements(QueueConfiguration $configuration): array {
-        $schemaName = $configuration->getSchemaName();
-
-        if ($schemaName === null) {
-            return [];
-        }
-
-        return [sprintf('CREATE SCHEMA IF NOT EXISTS %s', $this->quoteIdentifier($schemaName))];
-    }
-
     protected function queueTableStatement(QueueConfiguration $configuration): string {
         return sprintf(
             <<<'SQL'

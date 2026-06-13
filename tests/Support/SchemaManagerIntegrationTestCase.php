@@ -107,7 +107,7 @@ abstract class SchemaManagerIntegrationTestCase extends AbstractDatabaseIntegrat
         : DatabaseIntegrationConnection::configuredDatabaseName($this);
 
         try {
-            if ($platformName !== 'postgresql' && $platformName !== 'mysql' && $platformName !== 'mariadb') {
+            if ($platformName === 'postgresql') {
                 DatabaseIntegrationConnection::createSchemaIfSupported($pdo, $schemaName);
             }
 

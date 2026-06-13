@@ -93,8 +93,13 @@ abstract class DatabaseQueueIntegrationTestCase extends AbstractDatabaseIntegrat
         $listener = DatabaseIntegrationConnection::requirePdo($this);
         $tableName = DatabaseIntegrationConnection::uniqueTableName();
         $schemaName = DatabaseIntegrationConnection::uniqueSchemaName();
+        $platformName = DatabaseIntegrationConnection::platform($pdo)->getName();
 
         try {
+            if ($platformName === 'postgresql') {
+                DatabaseIntegrationConnection::createSchemaIfSupported($pdo, $schemaName);
+            }
+
             $configuration = new QueueConfiguration($tableName, $schemaName);
             $taskEnvironment = new TaskEnvironment($pdo, $configuration);
             $taskEnvironment->getSchemaManager()->bootstrap();

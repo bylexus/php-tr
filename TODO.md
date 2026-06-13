@@ -1,11 +1,6 @@
 # php-tr TODO
 
-- github action to run tests with docker containers
-- publish as composer package on packagist.org
-- simple task  that takes a/multiple callables and runs it
-
 - after job hook (also after cancel / failure)
-- skip schema creation
 
 ## Feature: separate log column [DONE]
 
@@ -21,3 +16,7 @@ The log column is part of the task queue table, but not loaded / stored with the
     - The log column should never be loaded / hydrated / stored with the other properties,
       it is a special column only for logging. This way, long logs can be stored without carrying it around for queue management.
 - add an example in the README.md in an appropriate section.
+
+## Change: Remove schema creation [DONE]
+
+The SchemaManager should not create the db schema or db (`create schema`, `create database`). This must be done by the user itself.

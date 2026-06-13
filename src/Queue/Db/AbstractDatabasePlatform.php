@@ -50,7 +50,6 @@ abstract class AbstractDatabasePlatform implements DatabasePlatform {
 
     public function exportSchemaStatements(QueueConfiguration $configuration): array {
         return array_merge(
-            $this->schemaStatements($configuration),
             [
                 $this->queueTableStatement($configuration),
                 $this->blobTableStatement($configuration),
@@ -63,7 +62,7 @@ abstract class AbstractDatabasePlatform implements DatabasePlatform {
         \PDO $connection,
         QueueConfiguration $configuration,
     ): array {
-        $statements = $this->schemaStatements($configuration);
+        $statements = [];
         $queueTableName = $configuration->getTableName();
         $blobTableName = $configuration->getBlobTableName();
         $queueTableExists = $this->tableExists($connection, $configuration, $queueTableName);
@@ -160,10 +159,6 @@ abstract class AbstractDatabasePlatform implements DatabasePlatform {
         $columnNames = $statement->fetchAll(\PDO::FETCH_COLUMN);
 
         return $columnNames;
-    }
-
-    protected function schemaStatements(QueueConfiguration $configuration): array {
-        return [];
     }
 
     abstract protected function queueTableStatement(QueueConfiguration $configuration): string;

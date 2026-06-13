@@ -53,7 +53,7 @@ final class SchemaManagerTest extends TestCase
             $this->createTaskEnvironment($this->mockPdo('pgsql'), new QueueConfiguration('custom_queue', 'custom_schema')),
         ))->exportDdl();
 
-        self::assertStringContainsString('CREATE SCHEMA IF NOT EXISTS "custom_schema"', $ddl);
+        self::assertStringNotContainsString('CREATE SCHEMA', $ddl);
         self::assertStringContainsString(
             'CREATE TABLE IF NOT EXISTS "custom_schema"."custom_queue"',
             $ddl,
